@@ -54,8 +54,6 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -705,7 +703,11 @@ private fun SeriesGrid(
                         genres = jsonStringList(meta?.genresJson),
                         plot = if (tmdbWins) meta?.overview ?: providerPlot else providerPlot ?: meta?.overview,
                         cast = tv.own.owntv.core.metadata.MetadataCast.parse(meta?.castJson),
-                        modifier = Modifier.heightIn(max = cine?.detailsHeight ?: Dp.Unspecified),
+                        // A reservation, not a cap: the stored detail-block height fixes the block's
+                        // size so the poster grid below it never moves. Genres and the cast row land
+                        // with TMDB enrichment, long after the provider's own title and plot, and
+                        // under heightIn they grew the block and stepped the whole grid down.
+                        modifier = cine?.detailsHeight?.let { Modifier.height(it) } ?: Modifier,
                     )
                     Spacer(Modifier.height(14.dp))
                 }
