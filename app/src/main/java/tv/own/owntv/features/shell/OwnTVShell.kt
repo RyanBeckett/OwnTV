@@ -1071,20 +1071,24 @@ fun OwnTVShell(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        selectedSection == MainSection.MOVIES -> MoviesScreen(
-                            onFullscreen = { openFullscreen() },
+                        // EXPERIMENTAL Netflix browse — category rows replace the rail+grid. Movies
+                        // play via the same playByIdAsync path Home uses; series are browse-only.
+                        // Revert these two branches to MoviesScreen/SeriesScreen to restore the grid.
+                        selectedSection == MainSection.MOVIES -> tv.own.owntv.features.browse.NetflixBrowseScreen(
+                            mediaType = tv.own.owntv.core.model.MediaType.MOVIE,
+                            onPlayMovie = { id ->
+                                scope.launch {
+                                    if (movieVm.playByIdAsync(id, 0L) && !movieVm.externalPlayerOn.value) openFullscreen(MainSection.MOVIES)
+                                }
+                            },
                             onChildFocused = { focusedLayer = ShellLayer.CONTENT },
-                            restoreFocus = restoreFocus,
-                            onRestored = { restoreFocus = false },
-                            onContentScrolled = { contentScrolled = it },
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        selectedSection == MainSection.SERIES -> SeriesScreen(
-                            onFullscreen = { openFullscreen() },
+                        selectedSection == MainSection.SERIES -> tv.own.owntv.features.browse.NetflixBrowseScreen(
+                            mediaType = tv.own.owntv.core.model.MediaType.SERIES,
+                            onPlayMovie = {},
                             onChildFocused = { focusedLayer = ShellLayer.CONTENT },
-                            restoreFocus = restoreFocus,
-                            onRestored = { restoreFocus = false },
                             modifier = Modifier.fillMaxSize(),
                         )
 
