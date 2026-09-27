@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -308,7 +309,9 @@ fun HomeScreen(
     }
     // Netflix focus billboard: the top hero reflects the poster under focus (year · rating · plot),
     // rotating through the featured titles while nothing is focused.
-    var billboardFocus by remember(state.catalogTopMovies) { mutableStateOf<BillboardItem?>(null) }
+    // Focus detail below the focused catalogue row (genre tags + synopsis), matching the browse screens.
+    var catalogFocusedRow by remember(state.catalogTopMovies) { mutableStateOf<String?>(null) }
+    val catalogDetail by vm.focusDetail.collectAsStateWithLifecycle()
     val featuredBillboards = remember(state.catalogTopMovies) {
         state.catalogTopMovies.filter { !it.backdropUrl.isNullOrBlank() }
             .ifEmpty { state.catalogTopMovies }
@@ -316,8 +319,8 @@ fun HomeScreen(
             .map { it.toBillboard() }
     }
     var heroRot by remember(featuredBillboards.size) { mutableStateOf(0) }
-    LaunchedEffect(featuredBillboards.size, billboardFocus) {
-        if (featuredBillboards.size > 1 && billboardFocus == null) {
+    LaunchedEffect(featuredBillboards.size, catalogFocusedRow) {
+        if (featuredBillboards.size > 1 && catalogFocusedRow == null) {
             while (true) {
                 delay(9000)
                 heroRot = (heroRot + 1) % featuredBillboards.size
@@ -376,7 +379,8 @@ fun HomeScreen(
                     title = stringResource(R.string.home_nf_top_movies),
                     movies = state.catalogTopMovies,
                     onPlay = { onPlayMovie(it, 0L) },
-                    onFocus = { billboardFocus = it.toBillboard() },
+                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-movies" },
+                    onFocus = { catalogFocusedRow = "nf-top-movies"; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -386,7 +390,8 @@ fun HomeScreen(
                     title = stringResource(R.string.home_nf_new_movies),
                     movies = state.catalogNewMovies,
                     onPlay = { onPlayMovie(it, 0L) },
-                    onFocus = { billboardFocus = it.toBillboard() },
+                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-new-movies" },
+                    onFocus = { catalogFocusedRow = "nf-new-movies"; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -395,7 +400,8 @@ fun HomeScreen(
                 NetflixCatalogSeriesRow(
                     title = stringResource(R.string.home_nf_top_series),
                     series = state.catalogTopSeries,
-                    onFocus = { billboardFocus = it.toBillboard() },
+                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-series" },
+                    onFocus = { catalogFocusedRow = "nf-top-series"; vm.onFocusCatalogSeries(it) },
                 )
             }
         }
@@ -2163,9 +2169,9 @@ private fun SkeletonRowPlaceholder(
 // ============================================================================================
 
 
-/** A titled horizontal poster row of catalogue movies. */
+/** A titled horizontal poster row of catalogue movies, with the focused item's detail below it. */
 @Composable
-private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onPlay: (Long) -> Unit, onFocus: (MovieEntity) -> Unit = {}) {
+private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onPlay: (Long) -> Unit, detail: HomeViewModel.FocusDetail? = null, onFocus: (MovieEntity) -> Unit = {}) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             title,
@@ -2185,12 +2191,13 @@ private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onP
                 )
             }
         }
+        CatalogRowDetail(detail)
     }
 }
 
-/** A titled horizontal poster row of catalogue series. */
+/** A titled horizontal poster row of catalogue series, with the focused item's detail below it. */
 @Composable
-private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, onFocus: (SeriesEntity) -> Unit = {}) {
+private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, detail: HomeViewModel.FocusDetail? = null, onFocus: (SeriesEntity) -> Unit = {}) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             title,
@@ -2202,6 +2209,34 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, o
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(series, key = { it.id }) { s ->
                 NetflixPosterCard(posterUrl = s.posterUrl, title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {}, onFocus = { onFocus(s) })
+            }
+        }
+        CatalogRowDetail(detail)
+    }
+}
+
+/** The focused item's genre/year/rating tags + synopsis, shown below its row (Netflix-style). */
+@Composable
+private fun CatalogRowDetail(detail: HomeViewModel.FocusDetail?) {
+    Column(modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 8.dp, top = 10.dp)) {
+        if (detail != null) {
+            if (detail.tags.isNotEmpty()) {
+                Text(
+                    detail.tags.joinToString("  ·  "),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = OwnTVTheme.colors.onSurface,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+            detail.plot?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OwnTVTheme.colors.onSurfaceVariant,
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth(0.7f),
+                )
             }
         }
     }

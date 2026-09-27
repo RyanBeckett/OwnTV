@@ -17,6 +17,10 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -134,6 +138,49 @@ class HomeViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    /** Detail for the focused catalogue poster, shown below its row: genre/year/rating tags + synopsis. */
+    data class FocusDetail(val id: Long, val tags: List<String>, val plot: String?)
+    private sealed interface FocusReq {
+        data class Movie(val m: MovieEntity) : FocusReq
+        data class Series(val s: SeriesEntity) : FocusReq
+    }
+    private val _focus = MutableStateFlow<FocusReq?>(null)
+
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+    val focusDetail: StateFlow<FocusDetail?> = _focus
+        .debounce(MetadataRepository.FOCUS_DEBOUNCE_MS)
+        .mapLatest { req ->
+            when (req) {
+                null -> null
+                is FocusReq.Movie -> {
+                    val meta = runCatching { metadata.resolveMovie(req.m) }.getOrNull()
+                    FocusDetail(req.m.id, focusTags(focusGenres(meta?.genresJson), req.m.year ?: meta?.year, req.m.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.m.plot)
+                }
+                is FocusReq.Series -> {
+                    val meta = runCatching { metadata.resolveSeries(req.s) }.getOrNull()
+                    FocusDetail(req.s.id, focusTags(focusGenres(meta?.genresJson), req.s.year ?: meta?.year, req.s.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.s.plot)
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun onFocusCatalogMovie(m: MovieEntity) { _focus.value = FocusReq.Movie(m) }
+    fun onFocusCatalogSeries(s: SeriesEntity) { _focus.value = FocusReq.Series(s) }
+
+    private fun focusGenres(json: String?): List<String> {
+        if (json.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val arr = org.json.JSONArray(json)
+            (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun focusTags(genres: List<String>, year: Int?, rating: Double?): List<String> =
+        genres.take(3) + listOfNotNull(
+            year?.takeIf { it > 0 }?.toString(),
+            rating?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
+        )
 
     /**
      * Single entry point for "rebuild the Home rails". Every trigger goes through here rather than
