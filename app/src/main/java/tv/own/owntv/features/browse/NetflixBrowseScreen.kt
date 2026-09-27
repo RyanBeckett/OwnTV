@@ -22,7 +22,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import org.koin.androidx.compose.koinViewModel
 import tv.own.owntv.core.model.MediaType
-import tv.own.owntv.ui.components.PosterCard
+import tv.own.owntv.ui.components.NetflixPosterCard
 import tv.own.owntv.ui.components.trapVerticalFocusExit
 import tv.own.owntv.ui.theme.OwnTVTheme
 
@@ -33,7 +33,7 @@ import tv.own.owntv.ui.theme.OwnTVTheme
 @Composable
 fun NetflixBrowseScreen(
     mediaType: MediaType,
-    onPlayMovie: (Long) -> Unit,
+    onPlay: (Long) -> Unit,
     onChildFocused: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -54,7 +54,7 @@ fun NetflixBrowseScreen(
             items(movieRows, key = { it.title }) { row ->
                 BrowseCategoryRow(row.title) {
                     items(row.items, key = { it.id }) { m ->
-                        PosterCard(posterUrl = m.posterUrl, title = m.name, rating = null, modifier = Modifier.width(132.dp), onClick = { onPlayMovie(m.id) })
+                        NetflixPosterCard(posterUrl = m.posterUrl, title = m.name, meta = nfMeta(m.year, m.rating?.toDouble()), modifier = Modifier.width(132.dp), onClick = { onPlay(m.id) })
                     }
                 }
             }
@@ -62,13 +62,19 @@ fun NetflixBrowseScreen(
             items(seriesRows, key = { it.title }) { row ->
                 BrowseCategoryRow(row.title) {
                     items(row.items, key = { it.id }) { s ->
-                        PosterCard(posterUrl = s.posterUrl, title = s.name, rating = null, modifier = Modifier.width(132.dp), onClick = {})
+                        NetflixPosterCard(posterUrl = s.posterUrl, title = s.name, meta = nfMeta(s.year, s.rating?.toDouble()), modifier = Modifier.width(132.dp), onClick = { onPlay(s.id) })
                     }
                 }
             }
         }
     }
 }
+
+/** "2025 · ★ 8.0" caption for a poster's focus overlay; null when nothing to show. */
+private fun nfMeta(year: Int?, rating: Double?): String? = listOfNotNull(
+    year?.takeIf { it > 0 }?.toString(),
+    rating?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
+).joinToString(" · ").ifBlank { null }
 
 /** A category title above a horizontal poster carousel. */
 @Composable

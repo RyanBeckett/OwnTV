@@ -889,6 +889,23 @@ class SeriesViewModel(
         return true
     }
 
+    /**
+     * Play a series straight from a poster (Netflix browse): resume the last-watched episode, or
+     * start episode one. Returns false if it can't play (no episodes, blocked, etc.).
+     */
+    suspend fun playSeriesByIdAsync(seriesId: Long): Boolean {
+        val show = seriesDao.getSeriesById(seriesId) ?: return false
+        val pid = currentProfileId() ?: return false
+        if (!tv.own.owntv.core.content.AdultCategoryClassifier.allows(pid, show.categoryId, profileDao, categoryDao)) return false
+        seriesRepository.loadEpisodes(show)
+        val queue = seriesDao.episodesBySeries(show.id).first()
+        if (queue.isEmpty()) return false
+        val lastId = progressDao.lastWatchedEpisodeId(pid, show.id)
+        val episode = queue.firstOrNull { it.id == lastId } ?: queue.first()
+        playEpisodeQueue(show, queue, episode, 0)
+        return true
+    }
+
     fun closeSeries() {
         _openedSeries.value = null
     }

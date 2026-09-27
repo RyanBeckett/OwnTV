@@ -101,6 +101,7 @@ import tv.own.owntv.core.model.HomeTrendingStyle
 import tv.own.owntv.player.HeroPreviewEngine
 import tv.own.owntv.ui.components.BrandLockup
 import tv.own.owntv.ui.components.FocusableSurface
+import tv.own.owntv.ui.components.NetflixPosterCard
 import tv.own.owntv.ui.components.OwnTVButton
 import tv.own.owntv.ui.components.OwnTVButtonStyle
 import tv.own.owntv.ui.components.OwnTVIcon
@@ -2243,8 +2244,8 @@ private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onP
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(movies, key = { it.id }) { movie ->
                 NetflixPosterCard(
-                    poster = movie.posterUrl,
-                    label = movie.name,
+                    posterUrl = movie.posterUrl,
+                    title = movie.name,
                     meta = posterMeta(movie.year, movie.rating?.toDouble()),
                     onClick = { onPlay(movie.id) },
                 )
@@ -2266,7 +2267,7 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>) {
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(series, key = { it.id }) { s ->
-                NetflixPosterCard(poster = s.posterUrl, label = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {})
+                NetflixPosterCard(posterUrl = s.posterUrl, title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {})
             }
         }
     }
@@ -2278,56 +2279,3 @@ private fun posterMeta(year: Int?, rating: Double?): String? = listOfNotNull(
     rating?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
 ).joinToString(" · ").ifBlank { null }
 
-/**
- * One poster tile: 2:3 artwork. Netflix-style focus — the card lifts (scale) and a bottom scrim
- * reveals the title + year/rating, which stay hidden while idle so the wall is just artwork.
- */
-@Composable
-private fun NetflixPosterCard(poster: String?, label: String, meta: String?, onClick: () -> Unit) {
-    val colors = OwnTVTheme.colors
-    FocusableSurface(
-        onClick = onClick,
-        shape = RoundedCornerShape(8.dp),
-        focusedScale = 1.08f,
-        modifier = Modifier.width(140.dp),
-    ) { focused ->
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(colors.surfaceContainerHigh),
-        ) {
-            if (!poster.isNullOrBlank()) {
-                AsyncImage(
-                    model = poster,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-            if (focused) {
-                Box(
-                    Modifier.fillMaxSize().gradientWash(
-                        vertical = true,
-                        0.5f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = 0.92f),
-                    ),
-                )
-                Column(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    meta?.let {
-                        Text(it, style = MaterialTheme.typography.labelSmall, color = colors.primary)
-                    }
-                }
-            }
-        }
-    }
-}

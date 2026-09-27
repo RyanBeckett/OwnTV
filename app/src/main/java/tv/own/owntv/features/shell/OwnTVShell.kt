@@ -1076,7 +1076,7 @@ fun OwnTVShell(
                         // Revert these two branches to MoviesScreen/SeriesScreen to restore the grid.
                         selectedSection == MainSection.MOVIES -> tv.own.owntv.features.browse.NetflixBrowseScreen(
                             mediaType = tv.own.owntv.core.model.MediaType.MOVIE,
-                            onPlayMovie = { id ->
+                            onPlay = { id ->
                                 scope.launch {
                                     if (movieVm.playByIdAsync(id, 0L) && !movieVm.externalPlayerOn.value) openFullscreen(MainSection.MOVIES)
                                 }
@@ -1087,7 +1087,11 @@ fun OwnTVShell(
 
                         selectedSection == MainSection.SERIES -> tv.own.owntv.features.browse.NetflixBrowseScreen(
                             mediaType = tv.own.owntv.core.model.MediaType.SERIES,
-                            onPlayMovie = {},
+                            onPlay = { id ->
+                                scope.launch {
+                                    if (seriesVm.playSeriesByIdAsync(id) && !seriesVm.externalPlayerOn.value) openFullscreen(MainSection.SERIES)
+                                }
+                            },
                             onChildFocused = { focusedLayer = ShellLayer.CONTENT },
                             modifier = Modifier.fillMaxSize(),
                         )

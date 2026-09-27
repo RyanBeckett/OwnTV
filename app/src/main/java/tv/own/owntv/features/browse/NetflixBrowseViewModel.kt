@@ -24,6 +24,9 @@ import tv.own.owntv.core.settings.SettingsRepository
  * Movies and Series. Each row is the first page of that category's paging source (same trick as the
  * Netflix Home rows), so it needs no manual-order/contextKey plumbing.
  */
+/** A 4-digit year or decade ("2024", "2010's", "1990s"), with any surrounding dash/space, for [baseName]. */
+private val ERA = Regex("(?i)\\s*-?\\s*((19|20)\\d{2}['’]?s|(19|20)\\d{2})\\s*")
+
 class NetflixBrowseViewModel(
     private val movieDao: MovieDao,
     private val seriesDao: SeriesDao,
@@ -86,13 +89,21 @@ class NetflixBrowseViewModel(
             .associate { it.value.key to it.value.value }
     }
 
-    /** Category name with a leading or trailing 4-digit year removed, so yearly folders collapse. */
-    private fun baseName(name: String): String =
-        name.trim()
-            .replace(Regex("^(19|20)\\d{2}\\s+"), "")
-            .replace(Regex("\\s+(19|20)\\d{2}$"), "")
-            .trim()
-            .ifBlank { name.trim() }
+    /**
+     * The row a category belongs to, with year/decade era tokens removed so all the yearly and
+     * decade folders of a genre collapse into one: "Drama 2024", "Drama 2010's" and "2020's Comedy"
+     * all lose their era; "1980's Classics".."1930's Classics" become "Classics". Anything mentioning
+     * 4K is one "4K" row (so "4K Releases" and the yearly "4K Movies" folders merge). Era tokens are
+     * stripped wherever they appear, and leftover separators (- & spaces) are trimmed off the ends.
+     */
+    private fun baseName(name: String): String {
+        val s = name.trim()
+        if (s.contains("4K", ignoreCase = true)) return "4K"
+        val stripped = ERA.replace(s, " ")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim { it == '-' || it == '&' || it.isWhitespace() }
+        return stripped.ifBlank { s }
+    }
 
     private suspend fun <T : Any> firstPage(src: PagingSource<Int, T>, n: Int): List<T> =
         (src.load(PagingSource.LoadParams.Refresh(key = null, loadSize = n, placeholdersEnabled = false))
