@@ -126,7 +126,10 @@ fun TopNav(
                     onClick = { onSelect(section) },
                     selected = isActive,
                     shape = RoundedCornerShape(8.dp),
-                    focusedContainerColor = Color.Transparent,
+                    // Focus = a light pill (the D-pad cursor); active section = the red underline
+                    // below. Kept separate so, back on the nav, you can tell the cursor from the
+                    // section you're actually in.
+                    focusedContainerColor = Color.White.copy(alpha = 0.18f),
                     unfocusedContainerColor = Color.Transparent,
                     selectedContainerColor = Color.Transparent,
                     showFocusBorder = false,
@@ -155,14 +158,15 @@ fun TopNav(
                             },
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         )
-                        // Red underline marks the active/focused tab; a transparent one reserves the
-                        // 3dp so the labels never shift vertically as focus moves between tabs.
+                        // Red underline marks ONLY the active section (not focus — focus is the pill),
+                        // so the two are always distinguishable. Transparent otherwise reserves the
+                        // 3dp so labels never shift vertically as focus moves between tabs.
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(3.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(if (isActive || focused) colors.primary else Color.Transparent),
+                                .background(if (isActive) colors.primary else Color.Transparent),
                         )
                     }
                 }
