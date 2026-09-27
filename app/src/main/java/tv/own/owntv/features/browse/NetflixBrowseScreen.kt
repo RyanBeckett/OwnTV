@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -49,6 +48,10 @@ fun NetflixBrowseScreen(
     val seriesRows by vm.seriesRows.collectAsStateWithLifecycle()
     val detail by vm.focusDetail.collectAsStateWithLifecycle()
     var focusedRow by remember { mutableStateOf<String?>(null) }
+    // The id of whatever poster holds focus RIGHT NOW (updated immediately, no debounce). The detail
+    // below only shows once the debounced lookup catches up to this id — so while you're scrolling
+    // fast the panel stays blank instead of flashing stale metadata for the tile you just left.
+    var focusedId by remember { mutableStateOf<Long?>(null) }
 
     LazyColumn(
         modifier = modifier
@@ -63,14 +66,14 @@ fun NetflixBrowseScreen(
             items(movieRows, key = { it.title }) { row ->
                 CategoryRowWithDetail(
                     title = row.title,
-                    detail = detail.takeIf { focusedRow == row.title },
+                    detail = detail.takeIf { focusedRow == row.title && detail?.id == focusedId },
                 ) {
                     items(row.items, key = { it.id }) { m ->
                         NetflixPosterCard(
-                            posterUrl = m.posterUrl, title = m.name,
+                            posterUrl = m.posterUrl, backdropUrl = m.backdropUrl, title = m.name,
                             meta = nfMeta(m.year, m.rating?.toDouble()),
                             onClick = { onPlay(m.id) },
-                            onFocus = { focusedRow = row.title; vm.onFocusMovie(m) },
+                            onFocus = { focusedRow = row.title; focusedId = m.id; vm.onFocusMovie(m) },
                         )
                     }
                 }
@@ -79,14 +82,14 @@ fun NetflixBrowseScreen(
             items(seriesRows, key = { it.title }) { row ->
                 CategoryRowWithDetail(
                     title = row.title,
-                    detail = detail.takeIf { focusedRow == row.title },
+                    detail = detail.takeIf { focusedRow == row.title && detail?.id == focusedId },
                 ) {
                     items(row.items, key = { it.id }) { s ->
                         NetflixPosterCard(
-                            posterUrl = s.posterUrl, title = s.name,
+                            posterUrl = s.posterUrl, backdropUrl = s.backdropUrl, title = s.name,
                             meta = nfMeta(s.year, s.rating?.toDouble()),
                             onClick = { onPlay(s.id) },
-                            onFocus = { focusedRow = row.title; vm.onFocusSeries(s) },
+                            onFocus = { focusedRow = row.title; focusedId = s.id; vm.onFocusSeries(s) },
                         )
                     }
                 }
@@ -117,9 +120,10 @@ private fun CategoryRowWithDetail(
             modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), content = content)
-        // Detail sits below the row and only for the focused row — reserve a little height so lower
-        // rows don't jump as it fades in/out.
-        Column(modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 4.dp, top = 10.dp)) {
+        // Detail sits below the row and only for the focused row. A FIXED height (not a min) is what
+        // stops the vertical bounce: the block is always this tall whether it's empty (scrolling) or
+        // showing a 3-line synopsis, so rows below never move as metadata fades in and out.
+        Column(modifier = Modifier.fillMaxWidth().height(96.dp).padding(start = 4.dp, top = 10.dp)) {
             if (detail != null) {
                 if (detail.tags.isNotEmpty()) {
                     Text(

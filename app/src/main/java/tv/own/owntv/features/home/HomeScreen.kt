@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -311,6 +310,9 @@ fun HomeScreen(
     // rotating through the featured titles while nothing is focused.
     // Focus detail below the focused catalogue row (genre tags + synopsis), matching the browse screens.
     var catalogFocusedRow by remember(state.catalogTopMovies) { mutableStateOf<String?>(null) }
+    // Id of the tile focused right now (no debounce). The detail below only shows once the debounced
+    // lookup catches up to it, so fast scrolling leaves the panel blank instead of flashing stale data.
+    var catalogFocusedId by remember(state.catalogTopMovies) { mutableStateOf<Long?>(null) }
     val catalogDetail by vm.focusDetail.collectAsStateWithLifecycle()
     val featuredBillboards = remember(state.catalogTopMovies) {
         state.catalogTopMovies.filter { !it.backdropUrl.isNullOrBlank() }
@@ -379,8 +381,8 @@ fun HomeScreen(
                     title = stringResource(R.string.home_nf_top_movies),
                     movies = state.catalogTopMovies,
                     onPlay = { onPlayMovie(it, 0L) },
-                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-movies" },
-                    onFocus = { catalogFocusedRow = "nf-top-movies"; vm.onFocusCatalogMovie(it) },
+                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
+                    onFocus = { catalogFocusedRow = "nf-top-movies"; catalogFocusedId = it.id; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -390,8 +392,8 @@ fun HomeScreen(
                     title = stringResource(R.string.home_nf_new_movies),
                     movies = state.catalogNewMovies,
                     onPlay = { onPlayMovie(it, 0L) },
-                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-new-movies" },
-                    onFocus = { catalogFocusedRow = "nf-new-movies"; vm.onFocusCatalogMovie(it) },
+                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
+                    onFocus = { catalogFocusedRow = "nf-new-movies"; catalogFocusedId = it.id; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -400,8 +402,8 @@ fun HomeScreen(
                 NetflixCatalogSeriesRow(
                     title = stringResource(R.string.home_nf_top_series),
                     series = state.catalogTopSeries,
-                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-series" },
-                    onFocus = { catalogFocusedRow = "nf-top-series"; vm.onFocusCatalogSeries(it) },
+                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
+                    onFocus = { catalogFocusedRow = "nf-top-series"; catalogFocusedId = it.id; vm.onFocusCatalogSeries(it) },
                 )
             }
         }
@@ -2184,6 +2186,7 @@ private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onP
             items(movies, key = { it.id }) { movie ->
                 NetflixPosterCard(
                     posterUrl = movie.posterUrl,
+                    backdropUrl = movie.backdropUrl,
                     title = movie.name,
                     meta = posterMeta(movie.year, movie.rating?.toDouble()),
                     onClick = { onPlay(movie.id) },
@@ -2208,7 +2211,7 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, d
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(series, key = { it.id }) { s ->
-                NetflixPosterCard(posterUrl = s.posterUrl, title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {}, onFocus = { onFocus(s) })
+                NetflixPosterCard(posterUrl = s.posterUrl, backdropUrl = s.backdropUrl, title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {}, onFocus = { onFocus(s) })
             }
         }
         CatalogRowDetail(detail)
@@ -2218,7 +2221,9 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, d
 /** The focused item's genre/year/rating tags + synopsis, shown below its row (Netflix-style). */
 @Composable
 private fun CatalogRowDetail(detail: HomeViewModel.FocusDetail?) {
-    Column(modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 8.dp, top = 10.dp)) {
+    // FIXED height (not a min): the block is always this tall whether empty or showing a synopsis, so
+    // rows below never shift as metadata fades in and out — kills the vertical bounce on fast scroll.
+    Column(modifier = Modifier.fillMaxWidth().height(96.dp).padding(start = 8.dp, top = 10.dp)) {
         if (detail != null) {
             if (detail.tags.isNotEmpty()) {
                 Text(

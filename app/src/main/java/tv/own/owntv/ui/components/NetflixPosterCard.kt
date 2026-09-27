@@ -1,15 +1,17 @@
 package tv.own.owntv.ui.components
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,47 +29,63 @@ import tv.own.owntv.ui.theme.OwnTVTheme
 import tv.own.owntv.ui.theme.gradientWash
 
 /**
- * The shared Netflix-style poster tile used by Home and the Movies/Series browse rows. Idle it is
- * just the artwork; on focus it lifts (scale) and a bottom scrim reveals the title and a meta line
- * (year · rating) — the "hover card" behaviour. One component so the focus detail is identical
- * everywhere.
+ * The shared Netflix-style poster tile used by Home and the Movies/Series browse rows. Idle it is a
+ * portrait poster; on focus it widens into a landscape "hover card" — same row height, so the row
+ * never shifts vertically, only the neighbours slide sideways — swapping to the backdrop art (when
+ * there is one) with a bottom scrim revealing the title and a meta line (year · rating). One
+ * component so the focus behaviour is identical everywhere.
  */
 @Composable
 fun NetflixPosterCard(
     posterUrl: String?,
+    backdropUrl: String?,
     title: String,
     meta: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    width: Dp = 132.dp,
+    height: Dp = 190.dp,
     onFocus: () -> Unit = {},
 ) {
     val colors = OwnTVTheme.colors
+    // Constant height; width is what grows. Portrait 2:3 idle, landscape 16:9 on focus — so lower
+    // rows never move (only the tiles beside this one slide over as it expands).
+    val portraitWidth = height * 2 / 3
+    val landscapeWidth = height * 16 / 9
+
     FocusableSurface(
         onClick = onClick,
         shape = RoundedCornerShape(8.dp),
-        focusedScale = 1.12f,
+        // The width animation is the "grow", so no extra scale-up on top of it.
+        focusedScale = 1f,
         unfocusedContainerColor = Color.Transparent,
         focusedContainerColor = Color.Transparent,
-        // Own fixed width so a poster carousel lays out correctly regardless of the caller.
         modifier = modifier
-            .width(width)
+            .height(height)
             .onFocusChanged { if (it.hasFocus) onFocus() },
     ) { focused ->
+        val animatedWidth by animateDpAsState(
+            targetValue = if (focused) landscapeWidth else portraitWidth,
+            label = "nfCardWidth",
+        )
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
+                .width(animatedWidth)
+                .fillMaxSize()
                 .clip(RoundedCornerShape(8.dp))
                 .background(colors.surfaceContainerHigh),
         ) {
-            if (!posterUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = posterUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            // Landscape backdrop while focused (falls back to the poster if there is no backdrop),
+            // portrait poster otherwise. Crossfade so the art swap isn't a hard cut.
+            val art = if (focused && !backdropUrl.isNullOrBlank()) backdropUrl else posterUrl
+            Crossfade(targetState = art, label = "nfCardArt") { model ->
+                if (!model.isNullOrBlank()) {
+                    AsyncImage(
+                        model = model,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
             if (focused) {
                 Box(
@@ -77,7 +95,7 @@ fun NetflixPosterCard(
                         1f to Color.Black.copy(alpha = 0.94f),
                     ),
                 )
-                Column(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+                Column(modifier = Modifier.align(Alignment.BottomStart).padding(10.dp)) {
                     Text(
                         title,
                         style = MaterialTheme.typography.labelMedium,

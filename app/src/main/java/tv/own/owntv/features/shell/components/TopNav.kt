@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,9 +40,10 @@ import tv.own.owntv.ui.theme.OwnTVTheme
 /**
  * EXPERIMENTAL Netflix-style horizontal top navigation, replacing the vertical [Sidebar].
  *
- * Layout: profile avatar (left) · the section tabs, centred · a search button (right). The active tab
- * is white + bold with a red underline; the rest are the Netflix secondary grey. D-pad moves left/
- * right between tabs and DOWN into the content below — the reverse of the old left rail, which is why
+ * Layout: a search button (left) · the section tabs, centred · the profile avatar (right). Tabs are
+ * Netflix-style pills — a bright white pill marks the D-pad cursor (focus), a faded white pill the
+ * active section — and More shows as a gear (it is the Settings hub). D-pad moves left/right between
+ * tabs and DOWN into the content below — the reverse of the old left rail, which is why
  * [tv.own.owntv.ui.components.trapVerticalFocusExit] now lets UP escape back here.
  *
  * The same [onSelect] / [selectedItemFocusRequester] plumbing the Sidebar used is kept, so the rest
@@ -92,7 +92,79 @@ fun TopNav(
             .padding(horizontal = 32.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Profile avatar — a simple initial disc; OK switches profile.
+        // Search — first, on the left. A bright-white circle on focus, matching the tab pills.
+        FocusableSurface(
+            onClick = onSearchClick,
+            shape = CircleShape,
+            focusedContainerColor = Color.White,
+            unfocusedContainerColor = Color.Transparent,
+            showFocusBorder = false,
+            modifier = Modifier.size(40.dp),
+            contentAlignment = Alignment.Center,
+        ) { focused ->
+            OwnTVIcon(
+                icon = OwnTVIcon.SEARCH,
+                tint = if (focused) Color.Black else colors.onSurface,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+
+        Spacer(Modifier.width(28.dp))
+
+        // Centred tab strip. Netflix-style pills: the D-pad cursor (focus) is a BRIGHT white pill; the
+        // section you're actually in is a FADED white pill. Two brightnesses of the same shape, so back
+        // on the nav you can always tell "where the cursor is" from "which section is open".
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            tabs.forEach { section ->
+                val isActive = section == activeSection
+                FocusableSurface(
+                    onClick = { onSelect(section) },
+                    selected = isActive,
+                    shape = RoundedCornerShape(50),
+                    focusedContainerColor = Color.White,                    // bright pill = hover cursor
+                    selectedContainerColor = Color.White.copy(alpha = 0.14f), // faded pill = active section
+                    unfocusedContainerColor = Color.Transparent,
+                    showFocusBorder = false,
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .then(
+                            if (activeSection == section) Modifier.focusRequester(selectedItemFocusRequester)
+                            else Modifier
+                        ),
+                ) { focused ->
+                    val contentColor = when {
+                        focused -> Color.Black          // dark text on the bright hover pill
+                        isActive -> Color.White          // white text on the faded active pill
+                        else -> colors.onSurfaceVariant  // grey when idle
+                    }
+                    // More is the Settings hub, so it reads as a gear rather than a word.
+                    if (section == MainSection.MORE) {
+                        OwnTVIcon(
+                            icon = OwnTVIcon.GEAR,
+                            tint = contentColor,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp).size(20.dp),
+                        )
+                    } else {
+                        Text(
+                            stringResourceSection(section),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (isActive || focused) FontWeight.Bold else FontWeight.Normal,
+                            color = contentColor,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.width(28.dp))
+
+        // Profile avatar — a simple initial disc; OK switches profile. Now on the right.
         FocusableSurface(
             onClick = onSwitchProfile,
             shape = CircleShape,
@@ -110,83 +182,6 @@ fun TopNav(
                     color = colors.onPrimary,
                 )
             }
-        }
-
-        Spacer(Modifier.width(28.dp))
-
-        // Centred tab strip.
-        Row(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            tabs.forEach { section ->
-                val isActive = section == activeSection
-                FocusableSurface(
-                    onClick = { onSelect(section) },
-                    selected = isActive,
-                    shape = RoundedCornerShape(8.dp),
-                    // Focus = a light pill (the D-pad cursor); active section = the red underline
-                    // below. Kept separate so, back on the nav, you can tell the cursor from the
-                    // section you're actually in.
-                    focusedContainerColor = Color.White.copy(alpha = 0.18f),
-                    unfocusedContainerColor = Color.Transparent,
-                    selectedContainerColor = Color.Transparent,
-                    showFocusBorder = false,
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .then(
-                            if (activeSection == section) Modifier.focusRequester(selectedItemFocusRequester)
-                            else Modifier
-                        ),
-                ) { focused ->
-                    // IntrinsicSize.Max makes the column exactly as wide as the label, so the
-                    // underline's fillMaxWidth traces the text rather than stretching the whole bar.
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.width(IntrinsicSize.Max),
-                    ) {
-                        Text(
-                            stringResourceSection(section),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = if (isActive || focused) FontWeight.Bold else FontWeight.Normal,
-                            color = when {
-                                focused -> Color.White
-                                isActive -> Color.White
-                                else -> colors.onSurfaceVariant
-                            },
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                        )
-                        // Red underline marks ONLY the active section (not focus — focus is the pill),
-                        // so the two are always distinguishable. Transparent otherwise reserves the
-                        // 3dp so labels never shift vertically as focus moves between tabs.
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(3.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(if (isActive) colors.primary else Color.Transparent),
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.width(28.dp))
-
-        // Search.
-        FocusableSurface(
-            onClick = onSearchClick,
-            shape = CircleShape,
-            modifier = Modifier.size(40.dp),
-            contentAlignment = Alignment.Center,
-        ) { focused ->
-            OwnTVIcon(
-                icon = OwnTVIcon.SEARCH,
-                tint = if (focused) colors.primary else colors.onSurface,
-                modifier = Modifier.size(22.dp),
-            )
         }
     }
     // Report focus for the shell's layer tracking.
