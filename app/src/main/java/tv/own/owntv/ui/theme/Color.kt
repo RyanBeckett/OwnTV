@@ -20,17 +20,17 @@ import tv.own.owntv.core.theme.OwnTVPalette
 val AccentCyan = Color(OwnTVPalette.AccentCyan)
 
 // ---------------- DARK (M3 dark over near-black #040e0b) ----------------
-val DarkBackground = Color(OwnTVPalette.DarkBackground) // Option A — nav + inter-panel gap surface
-val DarkSurface = Color(OwnTVPalette.DarkSurface)
-val DarkSurfaceContainerLowest = Color(OwnTVPalette.DarkSurfaceContainerLowest)
-val DarkSurfaceContainerLow = Color(OwnTVPalette.DarkSurfaceContainerLow)
-val DarkSurfaceContainer = Color(OwnTVPalette.DarkSurfaceContainer)
-val DarkSurfaceContainerHigh = Color(OwnTVPalette.DarkSurfaceContainerHigh)
-val DarkSurfaceContainerHighest = Color(OwnTVPalette.DarkSurfaceContainerHighest)
-val DarkOnSurface = Color(OwnTVPalette.DarkOnSurface)
-val DarkOnSurfaceVariant = Color(OwnTVPalette.DarkOnSurfaceVariant)
-val DarkOutline = Color(OwnTVPalette.DarkOutline)
-val DarkOutlineVariant = Color(OwnTVPalette.DarkOutlineVariant)
+val DarkBackground = Color(0xFF000000) // EXPERIMENTAL Netflix theme: pure black
+val DarkSurface = Color(0xFF141414) // Netflix signature dark
+val DarkSurfaceContainerLowest = Color(0xFF000000)
+val DarkSurfaceContainerLow = Color(0xFF141414)
+val DarkSurfaceContainer = Color(0xFF181818) // Netflix card
+val DarkSurfaceContainerHigh = Color(0xFF232323) // Netflix card hover
+val DarkSurfaceContainerHighest = Color(0xFF2F2F2F)
+val DarkOnSurface = Color(0xFFFFFFFF) // white
+val DarkOnSurfaceVariant = Color(0xFFB3B3B3) // Netflix secondary gray
+val DarkOutline = Color(0xFF333333)
+val DarkOutlineVariant = Color(0xFF2A2A2A)
 val DarkSecondary = Color(OwnTVPalette.DarkSecondary)
 val DarkOnSecondary = Color(OwnTVPalette.DarkOnSecondary)
 val DarkSecondaryContainer = Color(OwnTVPalette.DarkSecondaryContainer)

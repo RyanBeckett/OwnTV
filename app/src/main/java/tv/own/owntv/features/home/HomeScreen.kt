@@ -145,6 +145,9 @@ fun HomeScreen(
     val state by vm.uiState.collectAsStateWithLifecycle()
     val trendingUnavailableMessage = stringResource(R.string.home_trending_unavailable)
     val heroPreviewEngine = koinInject<HeroPreviewEngine>()
+    // Presentation toggle for the cast row on the trending-details popup; app-owned, see UiPreferences.
+    val showCast by koinInject<tv.own.owntv.features.settings.data.UiPreferences>()
+        .showCast.collectAsStateWithLifecycle(initialValue = true)
     val engineState by heroPreviewEngine.state.collectAsStateWithLifecycle()
     val isPreviewActive by vm.isPreviewActive.collectAsStateWithLifecycle()
     val lastInteractionMs by vm.lastHeroInteractionMs.collectAsStateWithLifecycle()
@@ -543,7 +546,7 @@ fun HomeScreen(
         }
     }
     detailsItem?.let { item ->
-        MediaDetailsScreen(details = item.toDetailsUi(detailsMetadata, detailsTmdbWins), onExit = {
+        MediaDetailsScreen(details = item.toDetailsUi(detailsMetadata, detailsTmdbWins, showCast), onExit = {
             detailsItem = null
             detailsMetadata = null
             homeScope.launch {
@@ -1034,7 +1037,7 @@ private fun TrendingControlButton(
 }
 
 @Composable
-private fun TrendingHomeItem.toDetailsUi(meta: MetadataCacheEntity?, tmdbWins: Boolean): MediaDetailsUi {
+private fun TrendingHomeItem.toDetailsUi(meta: MetadataCacheEntity?, tmdbWins: Boolean, showCast: Boolean = true): MediaDetailsUi {
     val snapshot = snapshot
     val providerPoster = when (this) {
         is TrendingHomeItem.Movie -> movie.posterUrl
@@ -1065,7 +1068,7 @@ private fun TrendingHomeItem.toDetailsUi(meta: MetadataCacheEntity?, tmdbWins: B
         metaLine = listOfNotNull(snapshot.year?.toString(), snapshot.rating?.let { stringResource(R.string.content_rating, it) }).joinToString(" · "),
         genres = trendingJsonList(meta?.genresJson),
         plot = if (tmdbWins) tmdbPlot ?: providerPlot else providerPlot ?: tmdbPlot,
-        cast = tv.own.owntv.core.metadata.MetadataCast.parse(meta?.castJson),
+        cast = if (showCast) tv.own.owntv.core.metadata.MetadataCast.parse(meta?.castJson) else emptyList(),
     )
 }
 

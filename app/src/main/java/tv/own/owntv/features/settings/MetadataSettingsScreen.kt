@@ -141,6 +141,7 @@ fun MetadataSettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val testState by vm.metadataTest.collectAsStateWithLifecycle()
     val language by vm.metadataLanguage.collectAsStateWithLifecycle()
     val budget by vm.metadataBudgetStatus.collectAsStateWithLifecycle()
+    val showCast by vm.showCast.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(tier) {
         if (tier == MetadataConfig.Tier.DEFAULT_WORKER) vm.refreshMetadataBudget()
@@ -304,6 +305,17 @@ fun MetadataSettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             chip = stringResource(metadataModeLabelRes(mode)), chevron = true,
             modifier = Modifier.focusRequester(firstFocus),
             onClick = { showModePicker = true },
+        )
+        // Show/hide the cast row on detail surfaces. A display toggle, so it stays available whatever
+        // the metadata mode is — the cast may already be cached from an earlier enriched sync even
+        // with TMDB currently off. On/Off reuses core's setup strings; PERSON reads as "people".
+        ServiceSettingsRow(
+            icon = OwnTVIcon.PERSON,
+            title = stringResource(R.string.settings_metadata_show_cast),
+            desc = stringResource(R.string.settings_metadata_show_cast_desc),
+            chip = stringResource(if (showCast) R.string.setup_on else R.string.setup_off),
+            primaryChip = showCast,
+            onClick = { vm.setShowCast(!showCast) },
         )
 
         // The advanced TMDB tier fields only make sense when TMDB is on (mode != Provider).

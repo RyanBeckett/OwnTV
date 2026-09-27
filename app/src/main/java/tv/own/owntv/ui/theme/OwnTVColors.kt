@@ -114,20 +114,19 @@ fun ownTvColors(
     customAccent: String = "",
     focusHighlight: String = "",
 ): OwnTVColors {
-    val roles = parseAccentHex(customAccent)?.let { rolesFrom(it, isDark) } ?: AccentRoles(
-        primary = accent.primary(isDark),
-        onPrimary = accent.onPrimary(isDark),
-        primaryContainer = accent.primaryContainer(isDark),
-        onPrimaryContainer = accent.onPrimaryContainer(isDark),
+    // EXPERIMENTAL Netflix theme: force the exact Netflix red (#E50914) as the accent, bypassing the
+    // M3 tonal generator so the hue is not lightened for dark surfaces. Delete this override block
+    // (and revert Color.kt) to restore the normal per-accent system.
+    val netflixRed = AccentRoles(
+        primary = Color(0xFFE50914),
+        onPrimary = Color(0xFFFFFFFF),
+        primaryContainer = Color(0xFFB20710),
+        onPrimaryContainer = Color(0xFFFFFFFF),
     )
+    val roles = netflixRed
     val primary = roles.primary
     // Always the dark-surface tone of the same accent: the player HUD is dark chrome in every theme.
-    val onVideoRoles = parseAccentHex(customAccent)?.let { rolesFrom(it, true) } ?: AccentRoles(
-        primary = accent.primary(true),
-        onPrimary = accent.onPrimary(true),
-        primaryContainer = accent.primaryContainer(true),
-        onPrimaryContainer = accent.onPrimaryContainer(true),
-    )
+    val onVideoRoles = netflixRed
     val focus = parseAccentHex(focusHighlight) ?: primary
     return if (isDark) {
         OwnTVColors(

@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -71,6 +72,14 @@ fun SearchBar(
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     surface: GlassSurface? = GlassSurface.CARDS,
+    /**
+     * When true the pill shrinks to a plain search icon while idle (unfocused and empty) and
+     * expands to the full field the moment it takes focus or holds a query. Off by default, so every
+     * existing SearchBar keeps its full-width look; the browse toolbars opt in to reclaim the row.
+     */
+    collapsible: Boolean = false,
+    /** Fires with the expanded state so the caller can hand the row's spare width to the field only while it is open. */
+    onExpandedChange: ((Boolean) -> Unit)? = null,
 ) {
     val colors = OwnTVTheme.colors
     val resolvedPlaceholder = placeholder ?: stringResource(R.string.common_search_hint)
@@ -85,6 +94,10 @@ fun SearchBar(
     val tvImeMetrics = LocalTvImeMetrics.current
     val shape = RoundedCornerShape(50)
     val focused = pillFocused || editing
+    // Idle = collapsible, not focused, nothing typed. Collapsed shows only the icon; expanded is the
+    // full field. Report the flip so the caller can weight the row (icon width vs fill) to match.
+    val collapsed = collapsible && !focused && query.isEmpty()
+    LaunchedEffect(collapsed) { onExpandedChange?.invoke(!collapsed) }
     // Glassy only when a surface is given and it's in the active glass scope (matches FocusableSurface).
     val glassy = surface != null && LocalGlass.current.isGlassy(surface)
     // The material reads as glass because a bright hairline lenses the whole edge at all times, not
@@ -119,6 +132,8 @@ fun SearchBar(
     Box(
         modifier = modifier
             .height(48.dp)
+            // Collapsed: a 48dp round icon button. Expanded: fill whatever width the caller gives.
+            .then(if (collapsed) Modifier.width(48.dp) else Modifier.fillMaxWidth())
             .clip(shape)
             .then(
                 // Frosted glass pill when this surface is glassy; plain tonal fill otherwise. glass()
@@ -136,14 +151,17 @@ fun SearchBar(
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = if (collapsed) 0.dp else 16.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
         ) {
             OwnTVIcon(
                 icon = OwnTVIcon.SEARCH,
                 tint = if (focused) colors.primary else colors.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(16.dp),
             )
+            // Collapsed shows the icon alone; the placeholder + field appear only once expanded.
+            if (!collapsed) {
             Spacer(Modifier.width(10.dp))
             Box(modifier = Modifier.weight(1f)) {
                 if (query.isEmpty()) {
@@ -183,6 +201,7 @@ fun SearchBar(
                     }),
                 )
             }
+            } // if (!collapsed)
         }
     }
 }

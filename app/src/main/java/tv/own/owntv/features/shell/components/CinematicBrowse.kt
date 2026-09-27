@@ -221,7 +221,7 @@ fun CinematicDetails(
             modifier = Modifier.alpha(step(1)),
         ) {
             if (metaLine.isNotBlank()) {
-                Text(metaLine, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                Text(metaLine, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
             }
             // Outlined, never filled: these should read as film-poster credits, not as UI chips.
             qualityBadges.forEach { badge ->
@@ -250,7 +250,7 @@ fun CinematicDetails(
             Spacer(Modifier.height(8.dp))
             Text(
                 genres.joinToString(stringResource(R.string.content_genres_separator)),
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.titleSmall,
                 color = colors.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -261,7 +261,7 @@ fun CinematicDetails(
             Spacer(Modifier.height(8.dp))
             Text(
                 plot,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
@@ -304,7 +304,7 @@ fun CinematicDetails(
                         Spacer(Modifier.height(5.dp))
                         Text(
                             member.name,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             color = colors.onSurfaceVariant,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,

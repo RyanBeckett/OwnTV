@@ -151,6 +151,7 @@
 1	log	app/src/main/java/tv/own/owntv/features/movies/MovieViewModel.kt	stalker VOD reconnect resolve failed movieId=${movie.id}
 2	log	app/src/main/java/tv/own/owntv/features/movies/MovieViewModel.kt	stalker resolve failed movieId=${movie.id}
 1	technical	app/src/main/java/tv/own/owntv/features/movies/MoviesScreen.kt	,
+1	technical	app/src/main/java/tv/own/owntv/features/movies/MoviesScreen.kt	cinematicRailWidth
 1	preference-key	app/src/main/java/tv/own/owntv/features/movies/MoviesScreen.kt	delete_subtitles
 1	preference-key	app/src/main/java/tv/own/owntv/features/movies/MoviesScreen.kt	download
 1	preference-key	app/src/main/java/tv/own/owntv/features/movies/MoviesScreen.kt	favourite
@@ -182,6 +183,7 @@
 1	log	app/src/main/java/tv/own/owntv/features/search/SearchViewModel.kt	record history failed profile=$pid type=$type itemId=$itemId
 1	log	app/src/main/java/tv/own/owntv/features/search/SearchViewModel.kt	stalker resolve failed movieId=${movie.id}
 1	technical	app/src/main/java/tv/own/owntv/features/series/SeriesScreen.kt	,
+1	technical	app/src/main/java/tv/own/owntv/features/series/SeriesScreen.kt	cinematicRailWidth
 1	preference-key	app/src/main/java/tv/own/owntv/features/series/SeriesScreen.kt	delete_subtitles
 2	preference-key	app/src/main/java/tv/own/owntv/features/series/SeriesScreen.kt	download
 1	preference-key	app/src/main/java/tv/own/owntv/features/series/SeriesScreen.kt	favourite
@@ -419,6 +421,8 @@
 3	technical	app/src/main/java/tv/own/owntv/features/settings/VideoPlayerSettingsScreen.kt	vp_volume_leveling
 4	preference-key	app/src/main/java/tv/own/owntv/features/settings/VideoPlayerSettingsScreen.kt	vp_zoom
 1	locale	app/src/main/java/tv/own/owntv/features/settings/VideoPlayerSettingsScreen.kt	–
+1	preference-key	app/src/main/java/tv/own/owntv/features/settings/data/UiPreferences.kt	owntv_ui_prefs
+1	preference-key	app/src/main/java/tv/own/owntv/features/settings/data/UiPreferences.kt	show_cast
 14	empty	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	\0
 2	file-path	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	/
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	m3u

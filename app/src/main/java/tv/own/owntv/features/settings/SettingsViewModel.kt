@@ -62,6 +62,7 @@ import tv.own.owntv.core.theme.UiZoom
 /** Phase 13 — manage IPTV sources (list / add / re-sync / delete) for the active profile. */
 class SettingsViewModel(
     private val profileDao: ProfileDao,
+    private val uiPreferences: tv.own.owntv.features.settings.data.UiPreferences,
     private val sourceDao: SourceDao,
     private val sourceRepository: SourceRepository,
     private val settings: SettingsRepository,
@@ -1546,6 +1547,15 @@ class SettingsViewModel(
 
     val metadataMode: StateFlow<tv.own.owntv.core.metadata.MetadataMode> =
         settings.metadataMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), tv.own.owntv.core.metadata.MetadataMode.PROVIDER_PLUS_TMDB)
+    /**
+     * Whether cast/actor rows are drawn on detail surfaces. Presentation-only, backed by the app's
+     * own [UiPreferences] rather than core settings — see that class. Default on.
+     */
+    val showCast: StateFlow<Boolean> =
+        uiPreferences.showCast.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setShowCast(value: Boolean) { viewModelScope.launch { uiPreferences.setShowCast(value) } }
+
     fun setMetadataMode(mode: tv.own.owntv.core.metadata.MetadataMode) { viewModelScope.launch { settings.setMetadataMode(mode) } }
 
     val tmdbApiKey: StateFlow<String> =

@@ -24,7 +24,10 @@ import androidx.compose.ui.focus.focusProperties
  */
 fun Modifier.trapVerticalFocusExit(): Modifier = focusProperties {
     onExit = {
-        if (requestedFocusDirection == FocusDirection.Up || requestedFocusDirection == FocusDirection.Down) {
+        // EXPERIMENTAL Netflix top-nav: UP must now escape to the nav bar sitting above the content,
+        // so only DOWN is trapped (nothing sits below the content anyway). Restore the `Up ||` clause
+        // to return to the left-rail behaviour where both vertical exits were blocked.
+        if (requestedFocusDirection == FocusDirection.Down) {
             cancelFocusChange()
         }
     }

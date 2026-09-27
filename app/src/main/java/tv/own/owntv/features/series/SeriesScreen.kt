@@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.ui.draw.clipToBounds
+import tv.own.owntv.ui.theme.ownTvTween
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -333,6 +338,9 @@ private fun SeriesGrid(
     val vodLayout by settingsVm.vodLayout.collectAsStateWithLifecycle()
     val cinematic = vodLayout == SettingsRepository.VodLayout.CINEMATIC
     val cinematicDetailsPct by settingsVm.cinematicDetailsHeight(PanelSection.SERIES).collectAsStateWithLifecycle()
+    // Presentation toggle: when off, the cast list is never built, so the row (and, in Cinematic,
+    // the space it reserves) is simply absent everywhere a series' details are drawn.
+    val showCast by settingsVm.showCast.collectAsStateWithLifecycle()
     // Cinematic is grid-only. The stored choice is deliberately not rewritten, so switching back to
     // Separate restores the user's List.
     val viewMode = if (cinematic) SettingsRepository.VodViewMode.GRID else storedViewMode
@@ -476,14 +484,14 @@ private fun SeriesGrid(
                     Modifier
                 } else if (cinematic) {
                     Modifier.padding(
-                        start = 0.dp,
+                        start = BrowseContainerPadding, // symmetric with end, so the rail is not flush against the icon rail
                         top = BrowseContainerPadding,
                         end = BrowseContainerPadding,
                         bottom = BrowseContainerPadding,
                     )
                 } else {
                     Modifier.roundedPanel(fillColor = ContentPanelFill).padding(
-                        start = 0.dp,
+                        start = BrowseContainerPadding, // symmetric with end, so the rail is not flush against the icon rail
                         top = BrowseContainerPadding,
                         end = BrowseContainerPadding,
                         bottom = BrowseContainerPadding,
@@ -514,6 +522,19 @@ private fun SeriesGrid(
         // Plan Z — More → Favourites and More → History pin this pane to one folder and put
         // their own three tabs above it, so there is no category rail to draw.
         if (lockedKey == null) {
+        // Slide-away (Cinematic only) — mirrors MoviesScreen. Once focus is on the poster grid the
+        // category column collapses to zero (clipped, not reflowed) so posters reclaim the width;
+        // Left focuses the rail again and it expands back. See MoviesScreen for the full rationale.
+        val fullRailGroupWidth = (cine?.category ?: panels?.category ?: Dimens.RailWidthFixed) +
+            BrowseContainerPadding + BrowseColumnGap + BrowseColumnDividerSpace + BrowseColumnGap
+        val railCollapsed = cinematic && gridPaneFocused && !railPaneFocused
+        val railGroupWidth by animateDpAsState(
+            targetValue = if (railCollapsed) 0.dp else fullRailGroupWidth,
+            animationSpec = ownTvTween(300),
+            label = "cinematicRailWidth",
+        )
+        Box(Modifier.width(railGroupWidth).clipToBounds()) {
+        Row(Modifier.requiredWidth(fullRailGroupWidth)) {
         CategoryRail(
             width = (cine?.category ?: panels?.category ?: Dimens.RailWidthFixed) + BrowseContainerPadding,
             categories = railItems.map {
@@ -596,6 +617,8 @@ private fun SeriesGrid(
         )
 
         Spacer(Modifier.width(BrowseColumnGap))
+        } // Row (requiredWidth full group)
+        } // Box (animated clip width)
         }
 
         val targetSeriesId = if (rememberSeries) {
@@ -608,7 +631,9 @@ private fun SeriesGrid(
             modifier = Modifier
                 // Cinematic is two columns, so the content takes everything the rail leaves —
                 // the stored list share is a three-way split and would leave the preview's gap empty.
-                .then(if (cine != null) Modifier.width(cine.content) else if (panels != null) Modifier.width(panels.list) else Modifier.weight(1.8f))
+                // Cinematic: fill whatever the (possibly collapsed) rail leaves, so the posters
+                // reclaim the space as the category column slides away. Separate keeps fixed widths.
+                .then(if (cine != null) Modifier.weight(1f) else if (panels != null) Modifier.width(panels.list) else Modifier.weight(1.8f))
                 .fillMaxSize()
                 .onFocusChanged { gridPaneFocused = it.hasFocus }
                 // CH+- key paging for this series list/grid. currentTargetIndex falls back to the
@@ -702,12 +727,18 @@ private fun SeriesGrid(
                         resumeLabel = null,
                         genres = jsonStringList(meta?.genresJson),
                         plot = if (tmdbWins) meta?.overview ?: providerPlot else providerPlot ?: meta?.overview,
-                        cast = tv.own.owntv.core.metadata.MetadataCast.parse(meta?.castJson),
+                        cast = if (showCast) tv.own.owntv.core.metadata.MetadataCast.parse(meta?.castJson) else emptyList(),
                         // A reservation, not a cap: the stored detail-block height fixes the block's
                         // size so the poster grid below it never moves. Genres and the cast row land
                         // with TMDB enrichment, long after the provider's own title and plot, and
                         // under heightIn they grew the block and stepped the whole grid down.
-                        modifier = cine?.detailsHeight?.let { Modifier.height(it) } ?: Modifier,
+                        // Reserve the fixed height only when the cast row is on: that async row is
+                        // what caused the jump the reservation prevents. With cast off there is no
+                        // tall late-arriving content, so wrap to what's there (capped at the stored
+                        // height) instead of leaving a block of empty backdrop below the plot.
+                        modifier = cine?.detailsHeight?.let {
+                            if (showCast) Modifier.height(it) else Modifier.heightIn(max = it)
+                        } ?: Modifier,
                     )
                     Spacer(Modifier.height(14.dp))
                 }
@@ -744,7 +775,17 @@ private fun SeriesGrid(
                     }
                     .focusGroup(),
             ) {
-                SearchBar(query = searchQuery, onQueryChange = vm::setSearchQuery, placeholder = stringResource(R.string.content_search_series), modifier = Modifier.weight(1f).focusRequester(listSearchFocus))
+                // Collapsible search: icon while idle, expands to the field on focus. See MoviesScreen.
+                var searchExpanded by remember { mutableStateOf(searchQuery.isNotEmpty()) }
+                SearchBar(
+                    query = searchQuery,
+                    onQueryChange = vm::setSearchQuery,
+                    placeholder = stringResource(R.string.content_search_series),
+                    collapsible = true,
+                    onExpandedChange = { searchExpanded = it },
+                    modifier = (if (searchExpanded) Modifier.weight(1f) else Modifier).focusRequester(listSearchFocus),
+                )
+                if (!searchExpanded) Spacer(Modifier.weight(1f))
                 Spacer(Modifier.width(10.dp))
                 SortChip(mode = sortMode, onToggle = vm::toggleSort, playlistLabel = stringResource(R.string.content_provider))
                 // Cinematic is grid-only, so the toggle would be a button that changes nothing.
@@ -870,7 +911,7 @@ private fun SeriesGrid(
                 val rating = if (tmdbWins) meta?.rating?.takeIf { it > 0 } ?: s.rating?.takeIf { it > 0 }
                     else s.rating?.takeIf { it > 0 } ?: meta?.rating?.takeIf { it > 0 }
                 val genres = jsonStringList(meta?.genresJson)
-                val cast = tv.own.owntv.core.metadata.MetadataCast.names(meta?.castJson)
+                val cast = if (showCast) tv.own.owntv.core.metadata.MetadataCast.names(meta?.castJson) else emptyList()
                 // Outer details Box carries the rounded panel (glass-aware); no clip/background here,
                 // mirroring MovieDetailsPane so the PreviewPanelFill glass shows through.
                 Column(
@@ -1006,7 +1047,7 @@ private fun SeriesGrid(
     detailsSeries?.let { s ->
         val cache = selectedSeriesMeta?.takeIf { it.seriesId == s.id }?.cache
         tv.own.owntv.features.shell.components.MediaDetailsScreen(
-            details = buildSeriesDetails(s, cache, metadataMode.tmdbWins),
+            details = buildSeriesDetails(s, cache, metadataMode.tmdbWins, showCast),
             onExit = { detailsSeries = null },
         )
     }
@@ -1134,6 +1175,7 @@ private fun buildSeriesDetails(
     s: SeriesEntity,
     meta: tv.own.owntv.core.database.entity.MetadataCacheEntity?,
     tmdbWins: Boolean,
+    showCast: Boolean = true,
 ): tv.own.owntv.features.shell.components.MediaDetailsUi {
     val providerPoster = s.posterUrl?.takeIf { it.isNotBlank() }
     val tmdbPoster = tv.own.owntv.core.metadata.MetadataImages.poster(meta?.posterPath)
@@ -1153,7 +1195,7 @@ private fun buildSeriesDetails(
         metaLine = metaLine,
         genres = jsonStringList(meta?.genresJson),
         plot = plot,
-        cast = tv.own.owntv.core.metadata.MetadataCast.parse(meta?.castJson),
+        cast = if (showCast) tv.own.owntv.core.metadata.MetadataCast.parse(meta?.castJson) else emptyList(),
     )
 }
 

@@ -1,7 +1,9 @@
 package tv.own.owntv.di
 
+import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.singleOf
+import tv.own.owntv.features.settings.data.UiPreferences
 import org.koin.core.module.dsl.viewModelOf
 import tv.own.owntv.features.more.MoreCountsViewModel
 import org.koin.dsl.module
@@ -102,9 +104,12 @@ val appModule = module {
     // binding stays explicit. Named arguments give it the same guarantee viewModelOf gives the rest:
     // reordering the constructor is safe, and adding a parameter is a compile error here, not a
     // silently mis-wired dependency at runtime.
+    // Presentation-only prefs (e.g. show/hide the cast row); app-owned, not core's data model.
+    single { UiPreferences(androidContext()) }
     viewModel {
         SettingsViewModel(
             profileDao = get(),
+            uiPreferences = get(),
             sourceDao = get(),
             sourceRepository = get(),
             settings = get(),
