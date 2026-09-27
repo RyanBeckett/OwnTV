@@ -34,7 +34,7 @@ import tv.own.owntv.ui.theme.gradientWash
 /**
  * The shared Netflix-style poster tile used by Home and the Movies/Series browse rows. Idle it is a
  * portrait poster; on focus it widens into a landscape "hover card" — same row height, so the row
- * never shifts vertically, only the neighbours slide sideways — swapping to the backdrop art (when
+ * never shifts vertically, only the neighbours move sideways — swapping to the backdrop art (when
  * there is one) with a bottom scrim revealing the title and a meta line (year · rating). One
  * component so the focus behaviour is identical everywhere.
  */
@@ -66,10 +66,11 @@ fun NetflixPosterCard(
             .height(height)
             .onFocusChanged { if (it.hasFocus) onFocus() },
     ) { focused ->
-        // Grow smoothly INTO focus, but collapse INSTANTLY out of it. A de-focused card that animated
-        // its shrink would sit between the row start and the newly-focused card and drag it leftward
-        // mid-grow — that's the one-directional "bounce" moving right. Snapping the collapse keeps the
-        // row settled except for the single card that's growing, so both directions are smooth.
+        // Grow smoothly INTO focus, collapse INSTANTLY out of it. A de-focused card that animated its
+        // shrink would sit between the row start and the newly-focused card and drag it leftward mid-
+        // grow — the one-directional bounce moving right. Snapping the collapse keeps the row settled
+        // except for the single card that's growing. (Animating the grow measured better than snapping
+        // it — a snap forces one big abrupt bringIntoView jump instead of a spread-out scroll.)
         val cardWidth = remember { Animatable(portraitWidth, Dp.VectorConverter) }
         LaunchedEffect(focused) {
             if (focused) cardWidth.animateTo(landscapeWidth, animationSpec = tween(durationMillis = 220))
