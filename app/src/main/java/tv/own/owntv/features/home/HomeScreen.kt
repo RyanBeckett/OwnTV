@@ -382,47 +382,9 @@ fun HomeScreen(
                 )
             }
         }
-        if (state.catalogTopMovies.isNotEmpty()) {
-            item(key = "nf-top-movies") {
-                NetflixCatalogMovieRow(
-                    title = stringResource(R.string.home_nf_top_movies),
-                    movies = state.catalogTopMovies,
-                    onPlay = { onPlayMovie(it, 0L) },
-                    heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-movies" },
-                    heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
-                    heroSelected = homeContentFocused,
-                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-top-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
-                )
-            }
-        }
-        if (state.catalogNewMovies.isNotEmpty()) {
-            item(key = "nf-new-movies") {
-                NetflixCatalogMovieRow(
-                    title = stringResource(R.string.home_nf_new_movies),
-                    movies = state.catalogNewMovies,
-                    onPlay = { onPlayMovie(it, 0L) },
-                    heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-new-movies" },
-                    heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
-                    heroSelected = homeContentFocused,
-                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-new-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
-                )
-            }
-        }
-        if (state.catalogTopSeries.isNotEmpty()) {
-            item(key = "nf-top-series") {
-                NetflixCatalogSeriesRow(
-                    title = stringResource(R.string.home_nf_top_series),
-                    series = state.catalogTopSeries,
-                    heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-series" },
-                    heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
-                    heroSelected = homeContentFocused,
-                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-top-series"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogSeries(it) },
-                )
-            }
-        }
+        // Catalogue "filler" rows (Top Rated / Recently Added / Popular Series) render BELOW the stock
+        // rows now — see the catalogRows() call after the loop — so Continue/Keep Watching and the
+        // other real content sit near the top instead of being pushed to the bottom by the filler.
         itemsIndexed(renderRows, key = { _, row -> row.name }) { index, row ->
             val firstItemFocusRequester = rowFocusRequester(row)
             val nextRowIndex = renderRows
@@ -601,6 +563,48 @@ fun HomeScreen(
                         firstItemFocusRequester = firstItemFocusRequester,
                     )
                 }
+            }
+        }
+        // Catalogue "filler" rows LAST, so Continue/Keep Watching and other real content stay up top.
+        if (state.catalogTopMovies.isNotEmpty()) {
+            item(key = "nf-top-movies") {
+                NetflixCatalogMovieRow(
+                    title = stringResource(R.string.home_nf_top_movies),
+                    movies = state.catalogTopMovies,
+                    onPlay = { onPlayMovie(it, 0L) },
+                    heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-movies" },
+                    heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
+                    heroSelected = homeContentFocused,
+                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
+                    onFocus = { catalogFocusedRow = "nf-top-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
+                )
+            }
+        }
+        if (state.catalogNewMovies.isNotEmpty()) {
+            item(key = "nf-new-movies") {
+                NetflixCatalogMovieRow(
+                    title = stringResource(R.string.home_nf_new_movies),
+                    movies = state.catalogNewMovies,
+                    onPlay = { onPlayMovie(it, 0L) },
+                    heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-new-movies" },
+                    heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
+                    heroSelected = homeContentFocused,
+                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
+                    onFocus = { catalogFocusedRow = "nf-new-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
+                )
+            }
+        }
+        if (state.catalogTopSeries.isNotEmpty()) {
+            item(key = "nf-top-series") {
+                NetflixCatalogSeriesRow(
+                    title = stringResource(R.string.home_nf_top_series),
+                    series = state.catalogTopSeries,
+                    heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-series" },
+                    heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
+                    heroSelected = homeContentFocused,
+                    detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
+                    onFocus = { catalogFocusedRow = "nf-top-series"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogSeries(it) },
+                )
             }
         }
       }
@@ -1243,9 +1247,9 @@ private fun HeroRowSection(
 
     Column(modifier = modifier) {
         Text(
-            text = stringResource(R.string.home_keep_watching).uppercase(),
-            style = MaterialTheme.typography.titleSmall,
-            color = colors.primary,
+            text = stringResource(R.string.home_keep_watching),
+            style = MaterialTheme.typography.titleMedium,
+            color = colors.onSurface,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = Dimens.HomeRowPaddingH),
         )
@@ -1796,9 +1800,9 @@ private fun ContinueWatchingRow(
         modifier = modifier.fillMaxWidth(),
     ) {
         Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.titleSmall,
-            color = OwnTVTheme.colors.primary,
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = OwnTVTheme.colors.onSurface,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = Dimens.HomeRowPaddingH),
         )
@@ -1860,9 +1864,9 @@ private fun TrendingPosterRow(
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.titleSmall,
-            color = OwnTVTheme.colors.primary,
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = OwnTVTheme.colors.onSurface,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = Dimens.HomeRowPaddingH),
         )
