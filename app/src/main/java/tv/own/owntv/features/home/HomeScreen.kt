@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -85,6 +86,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import androidx.compose.animation.Crossfade
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import tv.own.owntv.R
@@ -336,9 +338,9 @@ fun HomeScreen(
     ) {
         // EXPERIMENTAL Netflix Home — a featured hero and catalogue poster rows across the top, above
         // the stock history/trending rows. DOWN from the top nav lands on the hero's Play button.
-        state.catalogTopMovies.firstOrNull()?.let { featured ->
+        if (state.catalogTopMovies.isNotEmpty()) {
             item(key = "nf-hero") {
-                NetflixHomeHero(movie = featured, onPlay = { onPlayMovie(it, 0L) })
+                NetflixHomeHero(movies = state.catalogTopMovies.take(6), onPlay = { onPlayMovie(it, 0L) })
             }
         }
         if (state.catalogTopMovies.isNotEmpty()) {
@@ -2130,24 +2132,42 @@ private fun SkeletonRowPlaceholder(
 // these composables and their call sites in the LazyColumn to drop the feature.
 // ============================================================================================
 
-/** Big featured banner from a catalogue title: backdrop, title, meta, plot and a Play button. */
+/**
+ * Big featured banner that rotates through [movies]: backdrop, title, meta, plot and a Play button.
+ * The rotation pauses while the hero holds focus, so the Play button never slips out from under the
+ * user mid-cycle; it resumes once focus leaves.
+ */
 @Composable
-private fun NetflixHomeHero(movie: MovieEntity, onPlay: (Long) -> Unit) {
+private fun NetflixHomeHero(movies: List<MovieEntity>, onPlay: (Long) -> Unit) {
     val colors = OwnTVTheme.colors
+    var index by remember(movies) { mutableStateOf(0) }
+    var heroFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(movies, heroFocused) {
+        if (movies.size <= 1 || heroFocused) return@LaunchedEffect
+        while (true) {
+            delay(9000)
+            index = (index + 1) % movies.size
+        }
+    }
+    val movie = movies.getOrNull(index.coerceIn(0, movies.lastIndex)) ?: return
     val art = movie.backdropUrl?.takeIf { it.isNotBlank() } ?: movie.posterUrl
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(440.dp)
-            .clip(RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(16.dp))
+            .onFocusChanged { heroFocused = it.hasFocus },
     ) {
-        if (!art.isNullOrBlank()) {
-            AsyncImage(
-                model = art,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+        // Backdrop crossfades between featured titles; the text + button below share the same [movie].
+        Crossfade(targetState = art, label = "nf-hero-backdrop") { url ->
+            if (!url.isNullOrBlank()) {
+                AsyncImage(
+                    model = url,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
         // Left + bottom washes so the text stays legible over any artwork (Netflix's fade).
         Box(
@@ -2225,6 +2245,7 @@ private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onP
                 NetflixPosterCard(
                     poster = movie.posterUrl,
                     label = movie.name,
+                    meta = posterMeta(movie.year, movie.rating?.toDouble()),
                     onClick = { onPlay(movie.id) },
                 )
             }
@@ -2245,47 +2266,68 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>) {
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(series, key = { it.id }) { s ->
-                NetflixPosterCard(poster = s.posterUrl, label = s.name, onClick = {})
+                NetflixPosterCard(poster = s.posterUrl, label = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {})
             }
         }
     }
 }
 
-/** One poster tile: 2:3 artwork with a title caption; focusable, click plays/opens. */
+/** "2025 · ★ 8.0" style caption for a poster's focus overlay; null when there's nothing to show. */
+private fun posterMeta(year: Int?, rating: Double?): String? = listOfNotNull(
+    year?.takeIf { it > 0 }?.toString(),
+    rating?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
+).joinToString(" · ").ifBlank { null }
+
+/**
+ * One poster tile: 2:3 artwork. Netflix-style focus — the card lifts (scale) and a bottom scrim
+ * reveals the title + year/rating, which stay hidden while idle so the wall is just artwork.
+ */
 @Composable
-private fun NetflixPosterCard(poster: String?, label: String, onClick: () -> Unit) {
+private fun NetflixPosterCard(poster: String?, label: String, meta: String?, onClick: () -> Unit) {
     val colors = OwnTVTheme.colors
     FocusableSurface(
         onClick = onClick,
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.width(124.dp),
-    ) { _ ->
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(2f / 3f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.surfaceContainerHigh),
-            ) {
-                if (!poster.isNullOrBlank()) {
-                    AsyncImage(
-                        model = poster,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+        focusedScale = 1.08f,
+        modifier = Modifier.width(140.dp),
+    ) { focused ->
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(colors.surfaceContainerHigh),
+        ) {
+            if (!poster.isNullOrBlank()) {
+                AsyncImage(
+                    model = poster,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            if (focused) {
+                Box(
+                    Modifier.fillMaxSize().gradientWash(
+                        vertical = true,
+                        0.5f to Color.Transparent,
+                        1f to Color.Black.copy(alpha = 0.92f),
+                    ),
+                )
+                Column(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    meta?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = colors.primary)
+                    }
                 }
             }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 2.dp),
-            )
         }
     }
 }

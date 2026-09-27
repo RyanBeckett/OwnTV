@@ -80,21 +80,8 @@ fun PosterCard(
                     }
                 }
 
-                if (rating != null && rating > 0) {
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(6.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(Color.Black.copy(alpha = 0.55f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OwnTVIcon(OwnTVIcon.STAR, tint = colors.accent, filled = true, modifier = Modifier.size(12.dp))
-                        Spacer(Modifier.size(4.dp))
-                        Text(stringResource(R.string.common_rating, rating), style = MaterialTheme.typography.labelMedium, color = Color.White)
-                    }
-                }
+                // EXPERIMENTAL Netflix look: no rating badge on posters — Netflix keeps the wall
+                // clean and shows rating in the detail view only. Restore this block to bring it back.
 
                 // Watched: dim the art and stamp a teal ✓ badge (bottom-end). No progress bar is drawn
                 // for a completed item (the caller passes progressFraction = null in that case).
