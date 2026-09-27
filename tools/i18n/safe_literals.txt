@@ -42,6 +42,8 @@
 1	file-path	app/src/main/java/tv/own/owntv/OwnTVApp.kt	image_cache
 1	performance	app/src/main/java/tv/own/owntv/OwnTVApp.kt	koin-started
 3	empty	app/src/main/java/tv/own/owntv/core/i18n/LocalizedContent.kt	\0
+1	regex	app/src/main/java/tv/own/owntv/features/browse/NetflixBrowseViewModel.kt	\\s+(19|20)\\d{2}$
+1	regex	app/src/main/java/tv/own/owntv/features/browse/NetflixBrowseViewModel.kt	^(19|20)\\d{2}\\s+
 1	assertion	app/src/main/java/tv/own/owntv/features/customize/CustomizeItemsViewModel.kt	EPISODE not applicable
 2	assertion	app/src/main/java/tv/own/owntv/features/customize/CustomizeItemsViewModel.kt	EPISODE not applicable to category items
 3	empty	app/src/main/java/tv/own/owntv/features/customize/CustomizeScreen.kt	\0

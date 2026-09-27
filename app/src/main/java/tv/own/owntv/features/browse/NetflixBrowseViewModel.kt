@@ -47,25 +47,52 @@ class NetflixBrowseViewModel(
         viewModelScope.launch {
             val aps = activeProfileSources(settings, sourceDao).first()
 
-            val movieCats = categoryDao.observe(aps.movieSourceIds, MediaType.MOVIE).first()
-                .filterNot { AdultCategoryClassifier.isAdult(it.name) }
-                .take(MAX_ROWS)
-            _movieRows.value = movieCats.mapNotNull { cat ->
-                firstPage(movieDao.pagingByCategory(cat.id), ROW_SIZE)
+            val movieGroups = mergedGroups(categoryDao.observe(aps.movieSourceIds, MediaType.MOVIE).first())
+            _movieRows.value = movieGroups.entries.take(MAX_ROWS).mapNotNull { (title, ids) ->
+                ids.flatMap { firstPage(movieDao.pagingByCategory(it), ROW_SIZE) }
+                    .distinctBy { it.id }
+                    .take(ROW_SIZE)
                     .takeIf { it.isNotEmpty() }
-                    ?.let { MovieRow(cat.name, it) }
+                    ?.let { MovieRow(title, it) }
             }
 
-            val seriesCats = categoryDao.observe(aps.seriesSourceIds, MediaType.SERIES).first()
-                .filterNot { AdultCategoryClassifier.isAdult(it.name) }
-                .take(MAX_ROWS)
-            _seriesRows.value = seriesCats.mapNotNull { cat ->
-                firstPage(seriesDao.pagingByCategory(cat.id), ROW_SIZE)
+            val seriesGroups = mergedGroups(categoryDao.observe(aps.seriesSourceIds, MediaType.SERIES).first())
+            _seriesRows.value = seriesGroups.entries.take(MAX_ROWS).mapNotNull { (title, ids) ->
+                ids.flatMap { firstPage(seriesDao.pagingByCategory(it), ROW_SIZE) }
+                    .distinctBy { it.id }
+                    .take(ROW_SIZE)
                     .takeIf { it.isNotEmpty() }
-                    ?.let { SeriesRow(cat.name, it) }
+                    ?.let { SeriesRow(title, it) }
             }
         }
     }
+
+    /**
+     * Merge duplicate/year-fragmented categories into one row each, keyed by a base name with any
+     * leading or trailing 4-digit year stripped ("Drama 2024" + "Drama 2025" -> "Drama", "2024 4K
+     * Movies" + "2025 4K Movies" -> "4K Movies"). Adult categories are dropped. Ordering: the base
+     * names that span the most year-fragments (the major genres) come first, otherwise the provider's
+     * original order is preserved — a cleaner, less repetitive list than the raw category feed.
+     */
+    private fun mergedGroups(cats: List<tv.own.owntv.core.database.entity.CategoryEntity>): Map<String, List<Long>> {
+        val groups = LinkedHashMap<String, MutableList<Long>>()
+        cats.filterNot { AdultCategoryClassifier.isAdult(it.name) }
+            .forEach { groups.getOrPut(baseName(it.name)) { mutableListOf() }.add(it.id) }
+        // Stable sort by fragment count desc — single-category rows keep their first-appearance order.
+        return groups.entries
+            .withIndex()
+            .sortedWith(compareByDescending<IndexedValue<Map.Entry<String, MutableList<Long>>>> { it.value.value.size }
+                .thenBy { it.index })
+            .associate { it.value.key to it.value.value }
+    }
+
+    /** Category name with a leading or trailing 4-digit year removed, so yearly folders collapse. */
+    private fun baseName(name: String): String =
+        name.trim()
+            .replace(Regex("^(19|20)\\d{2}\\s+"), "")
+            .replace(Regex("\\s+(19|20)\\d{2}$"), "")
+            .trim()
+            .ifBlank { name.trim() }
 
     private suspend fun <T : Any> firstPage(src: PagingSource<Int, T>, n: Int): List<T> =
         (src.load(PagingSource.LoadParams.Refresh(key = null, loadSize = n, placeholdersEnabled = false))
