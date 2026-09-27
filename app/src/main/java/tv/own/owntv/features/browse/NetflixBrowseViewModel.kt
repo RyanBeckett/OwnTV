@@ -21,6 +21,7 @@ import tv.own.owntv.core.database.dao.SeriesDao
 import tv.own.owntv.core.database.dao.SourceDao
 import tv.own.owntv.core.database.entity.MovieEntity
 import tv.own.owntv.core.database.entity.SeriesEntity
+import tv.own.owntv.core.metadata.MetadataImages
 import tv.own.owntv.core.metadata.MetadataRepository
 import tv.own.owntv.core.model.MediaType
 import tv.own.owntv.core.repository.activeProfileSources
@@ -46,8 +47,12 @@ class NetflixBrowseViewModel(
     data class MovieRow(val title: String, val items: List<MovieEntity>)
     data class SeriesRow(val title: String, val items: List<SeriesEntity>)
 
-    /** Detail for the focused poster, shown below its row: genre/year/rating tags plus a synopsis. */
-    data class FocusDetail(val id: Long, val tags: List<String>, val plot: String?)
+    /**
+     * Detail for the focused poster, shown below its row: genre/year/rating tags plus a synopsis.
+     * [backdrop] is the best landscape image for the focused card's wide state — the TMDB backdrop
+     * once resolved (a proper 16:9 still), falling back to the provider's own backdrop.
+     */
+    data class FocusDetail(val id: Long, val tags: List<String>, val plot: String?, val backdrop: String?)
 
     private sealed interface FocusReq {
         data class Movie(val m: MovieEntity) : FocusReq
@@ -84,8 +89,8 @@ class NetflixBrowseViewModel(
     /** Network-free detail straight off the entity (no genres yet) — the instant first paint. */
     private fun instantDetail(req: FocusReq?): FocusDetail? = when (req) {
         null -> null
-        is FocusReq.Movie -> FocusDetail(req.m.id, tags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() })
-        is FocusReq.Series -> FocusDetail(req.s.id, tags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() })
+        is FocusReq.Movie -> FocusDetail(req.m.id, tags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() }, req.m.backdropUrl)
+        is FocusReq.Series -> FocusDetail(req.s.id, tags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() }, req.s.backdropUrl)
     }
 
     private suspend fun resolveDetail(req: FocusReq?): FocusDetail? = when (req) {
@@ -96,6 +101,7 @@ class NetflixBrowseViewModel(
                 id = req.m.id,
                 tags = tags(genres(meta?.genresJson), req.m.year ?: meta?.year, req.m.rating?.toDouble() ?: meta?.rating),
                 plot = meta?.overview?.takeIf { it.isNotBlank() } ?: req.m.plot,
+                backdrop = MetadataImages.backdrop(meta?.backdropPath, size = "w780") ?: req.m.backdropUrl,
             )
         }
         is FocusReq.Series -> {
@@ -104,6 +110,7 @@ class NetflixBrowseViewModel(
                 id = req.s.id,
                 tags = tags(genres(meta?.genresJson), req.s.year ?: meta?.year, req.s.rating?.toDouble() ?: meta?.rating),
                 plot = meta?.overview?.takeIf { it.isNotBlank() } ?: req.s.plot,
+                backdrop = MetadataImages.backdrop(meta?.backdropPath, size = "w780") ?: req.s.backdropUrl,
             )
         }
     }
@@ -189,7 +196,7 @@ class NetflixBrowseViewModel(
 
     companion object {
         const val MAX_ROWS = 15
-        const val ROW_SIZE = 20
+        const val ROW_SIZE = 60
         // Settle delay before resolving the focus detail — far shorter than the core's 700ms focus
         // debounce. The screen blanks the panel while focus moves, so this only needs to outlast a
         // fast D-pad sweep; on settle the network-free tier-1 detail paints almost immediately.

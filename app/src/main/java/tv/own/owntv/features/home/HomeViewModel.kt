@@ -70,7 +70,7 @@ data class TrendingDetailsMetadata(
 )
 
 /** How many titles each Netflix-style catalogue row on Home loads. */
-private const val CATALOG_ROW_SIZE = 24
+private const val CATALOG_ROW_SIZE = 60
 
 /**
  * Settle delay before the focus detail resolves — much shorter than [MetadataRepository.FOCUS_DEBOUNCE_MS]
@@ -147,8 +147,12 @@ class HomeViewModel(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    /** Detail for the focused catalogue poster, shown below its row: genre/year/rating tags + synopsis. */
-    data class FocusDetail(val id: Long, val tags: List<String>, val plot: String?)
+    /**
+     * Detail for the focused catalogue poster, shown below its row: genre/year/rating tags + synopsis.
+     * [backdrop] is the best landscape image for the focused card's wide state — the TMDB backdrop once
+     * resolved (a proper 16:9 still), falling back to the provider's own backdrop.
+     */
+    data class FocusDetail(val id: Long, val tags: List<String>, val plot: String?, val backdrop: String?)
     private sealed interface FocusReq {
         data class Movie(val m: MovieEntity) : FocusReq
         data class Series(val s: SeriesEntity) : FocusReq
@@ -174,8 +178,8 @@ class HomeViewModel(
     /** Network-free detail straight off the entity (no genres yet) — the instant first paint. */
     private fun instantFocusDetail(req: FocusReq?): FocusDetail? = when (req) {
         null -> null
-        is FocusReq.Movie -> FocusDetail(req.m.id, focusTags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() })
-        is FocusReq.Series -> FocusDetail(req.s.id, focusTags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() })
+        is FocusReq.Movie -> FocusDetail(req.m.id, focusTags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() }, req.m.backdropUrl)
+        is FocusReq.Series -> FocusDetail(req.s.id, focusTags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() }, req.s.backdropUrl)
     }
 
     /** Full detail including TMDB genres/synopsis — may hit the network on a first, uncached focus. */
@@ -183,11 +187,11 @@ class HomeViewModel(
         null -> null
         is FocusReq.Movie -> {
             val meta = runCatching { metadata.resolveMovie(req.m) }.getOrNull()
-            FocusDetail(req.m.id, focusTags(focusGenres(meta?.genresJson), req.m.year ?: meta?.year, req.m.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.m.plot)
+            FocusDetail(req.m.id, focusTags(focusGenres(meta?.genresJson), req.m.year ?: meta?.year, req.m.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.m.plot, MetadataImages.backdrop(meta?.backdropPath, size = "w780") ?: req.m.backdropUrl)
         }
         is FocusReq.Series -> {
             val meta = runCatching { metadata.resolveSeries(req.s) }.getOrNull()
-            FocusDetail(req.s.id, focusTags(focusGenres(meta?.genresJson), req.s.year ?: meta?.year, req.s.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.s.plot)
+            FocusDetail(req.s.id, focusTags(focusGenres(meta?.genresJson), req.s.year ?: meta?.year, req.s.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.s.plot, MetadataImages.backdrop(meta?.backdropPath, size = "w780") ?: req.s.backdropUrl)
         }
     }
 

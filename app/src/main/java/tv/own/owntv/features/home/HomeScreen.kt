@@ -126,6 +126,7 @@ import tv.own.owntv.core.metadata.MetadataImages
 import tv.own.owntv.core.database.entity.MovieEntity
 import tv.own.owntv.core.database.entity.SeriesEntity
 import tv.own.owntv.core.trending.ProviderVariantParser
+import tv.own.owntv.features.browse.LeadingEdgeBringIntoView
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.compose.foundation.layout.widthIn
@@ -2172,6 +2173,7 @@ private fun SkeletonRowPlaceholder(
 
 
 /** A titled horizontal poster row of catalogue movies, with the focused item's detail below it. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onPlay: (Long) -> Unit, detail: HomeViewModel.FocusDetail? = null, onFocus: (MovieEntity) -> Unit = {}) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -2182,16 +2184,19 @@ private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onP
             color = OwnTVTheme.colors.onSurface,
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(movies, key = { it.id }) { movie ->
-                NetflixPosterCard(
-                    posterUrl = movie.posterUrl,
-                    backdropUrl = movie.backdropUrl,
-                    title = movie.name,
-                    meta = posterMeta(movie.year, movie.rating?.toDouble()),
-                    onClick = { onPlay(movie.id) },
-                    onFocus = { onFocus(movie) },
-                )
+        CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(movies, key = { it.id }) { movie ->
+                    NetflixPosterCard(
+                        posterUrl = movie.posterUrl,
+                        // Focused card is landscape → give it the better TMDB backdrop once resolved.
+                        backdropUrl = if (movie.id == detail?.id) detail?.backdrop ?: movie.backdropUrl else movie.backdropUrl,
+                        title = movie.name,
+                        meta = posterMeta(movie.year, movie.rating?.toDouble()),
+                        onClick = { onPlay(movie.id) },
+                        onFocus = { onFocus(movie) },
+                    )
+                }
             }
         }
         CatalogRowDetail(detail)
@@ -2199,6 +2204,7 @@ private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onP
 }
 
 /** A titled horizontal poster row of catalogue series, with the focused item's detail below it. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, detail: HomeViewModel.FocusDetail? = null, onFocus: (SeriesEntity) -> Unit = {}) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -2209,9 +2215,15 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, d
             color = OwnTVTheme.colors.onSurface,
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(series, key = { it.id }) { s ->
-                NetflixPosterCard(posterUrl = s.posterUrl, backdropUrl = s.backdropUrl, title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {}, onFocus = { onFocus(s) })
+        CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(series, key = { it.id }) { s ->
+                    NetflixPosterCard(
+                        posterUrl = s.posterUrl,
+                        backdropUrl = if (s.id == detail?.id) detail?.backdrop ?: s.backdropUrl else s.backdropUrl,
+                        title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {}, onFocus = { onFocus(s) },
+                    )
+                }
             }
         }
         CatalogRowDetail(detail)
@@ -2223,12 +2235,12 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, d
 private fun CatalogRowDetail(detail: HomeViewModel.FocusDetail?) {
     // FIXED height (not a min): the block is always this tall whether empty or showing a synopsis, so
     // rows below never shift as metadata fades in and out — kills the vertical bounce on fast scroll.
-    Column(modifier = Modifier.fillMaxWidth().height(96.dp).padding(start = 8.dp, top = 10.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().height(116.dp).padding(start = 8.dp, top = 10.dp)) {
         if (detail != null) {
             if (detail.tags.isNotEmpty()) {
                 Text(
                     detail.tags.joinToString("  ·  "),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = OwnTVTheme.colors.onSurface,
                 )
@@ -2237,7 +2249,7 @@ private fun CatalogRowDetail(detail: HomeViewModel.FocusDetail?) {
             detail.plot?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     it,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = OwnTVTheme.colors.onSurfaceVariant,
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth(0.7f),
