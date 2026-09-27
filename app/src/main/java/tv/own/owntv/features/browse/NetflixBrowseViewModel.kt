@@ -219,7 +219,10 @@ class NetflixBrowseViewModel(
                 .sortedBy { it.trendingRank }
                 .take(10)
             val movieById = movieDao.getByIds(trendingMovies.map { it.providerItemId }).associateBy { it.id }
+            // Prefer this week's trending; fall back to the library's top-rated so the row always has
+            // ten good recommendations even before the trending table has matched any movies.
             _top10Movies.value = trendingMovies.mapNotNull { movieById[it.providerItemId] }
+                .ifEmpty { firstPage(movieDao.pagingAllRating(movieIds), 10) }
 
             val movieGroups = mergedGroups(categoryDao.observe(aps.movieSourceIds, MediaType.MOVIE).first())
             _movieRows.value = movieGroups.entries.take(MAX_ROWS).mapNotNull { (title, ids) ->
