@@ -86,11 +86,15 @@ class NetflixBrowseViewModel(
     fun onFocusMovie(m: MovieEntity) { _focus.value = FocusReq.Movie(m) }
     fun onFocusSeries(s: SeriesEntity) { _focus.value = FocusReq.Series(s) }
 
-    /** Network-free detail straight off the entity (no genres yet) — the instant first paint. */
+    /**
+     * Network-free detail straight off the entity (no genres yet) — the instant first paint. Backdrop
+     * is deliberately null here: the wide card keeps showing the poster until the single resolved
+     * backdrop is ready, so there's no provider→TMDB image re-swap for the eye to catch.
+     */
     private fun instantDetail(req: FocusReq?): FocusDetail? = when (req) {
         null -> null
-        is FocusReq.Movie -> FocusDetail(req.m.id, tags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() }, req.m.backdropUrl)
-        is FocusReq.Series -> FocusDetail(req.s.id, tags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() }, req.s.backdropUrl)
+        is FocusReq.Movie -> FocusDetail(req.m.id, tags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() }, backdrop = null)
+        is FocusReq.Series -> FocusDetail(req.s.id, tags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() }, backdrop = null)
     }
 
     private suspend fun resolveDetail(req: FocusReq?): FocusDetail? = when (req) {

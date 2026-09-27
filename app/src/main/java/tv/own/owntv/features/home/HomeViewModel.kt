@@ -178,8 +178,8 @@ class HomeViewModel(
     /** Network-free detail straight off the entity (no genres yet) — the instant first paint. */
     private fun instantFocusDetail(req: FocusReq?): FocusDetail? = when (req) {
         null -> null
-        is FocusReq.Movie -> FocusDetail(req.m.id, focusTags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() }, req.m.backdropUrl)
-        is FocusReq.Series -> FocusDetail(req.s.id, focusTags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() }, req.s.backdropUrl)
+        is FocusReq.Movie -> FocusDetail(req.m.id, focusTags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() }, backdrop = null)
+        is FocusReq.Series -> FocusDetail(req.s.id, focusTags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() }, backdrop = null)
     }
 
     /** Full detail including TMDB genres/synopsis — may hit the network on a first, uncached focus. */

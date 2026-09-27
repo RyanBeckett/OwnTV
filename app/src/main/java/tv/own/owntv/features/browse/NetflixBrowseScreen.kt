@@ -75,9 +75,10 @@ fun NetflixBrowseScreen(
                     items(row.items, key = { it.id }) { m ->
                         NetflixPosterCard(
                             posterUrl = m.posterUrl,
-                            // The focused card shows a landscape image, so give it the better TMDB
-                            // backdrop once resolved (a real 16:9 still) rather than the provider's.
-                            backdropUrl = if (m.id == focusedId) detail?.backdrop ?: m.backdropUrl else m.backdropUrl,
+                            // Only the focused card shows a backdrop, and only the resolved one (TMDB,
+                            // or the provider's as fallback) — null until then, so the poster holds and
+                            // the backdrop fades in once, cleanly.
+                            backdropUrl = if (m.id == focusedId) detail?.backdrop else null,
                             title = m.name,
                             meta = nfMeta(m.year, m.rating?.toDouble()),
                             onClick = { onPlay(m.id) },
@@ -95,7 +96,7 @@ fun NetflixBrowseScreen(
                     items(row.items, key = { it.id }) { s ->
                         NetflixPosterCard(
                             posterUrl = s.posterUrl,
-                            backdropUrl = if (s.id == focusedId) detail?.backdrop ?: s.backdropUrl else s.backdropUrl,
+                            backdropUrl = if (s.id == focusedId) detail?.backdrop else null,
                             title = s.name,
                             meta = nfMeta(s.year, s.rating?.toDouble()),
                             onClick = { onPlay(s.id) },

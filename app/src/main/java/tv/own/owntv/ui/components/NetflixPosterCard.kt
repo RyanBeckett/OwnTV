@@ -1,6 +1,5 @@
 package tv.own.owntv.ui.components
 
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
@@ -28,6 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import tv.own.owntv.ui.theme.OwnTVTheme
 import tv.own.owntv.ui.theme.gradientWash
 
@@ -83,18 +85,30 @@ fun NetflixPosterCard(
                 .clip(RoundedCornerShape(8.dp))
                 .background(colors.surfaceContainerHigh),
         ) {
-            // Landscape backdrop while focused (falls back to the poster if there is no backdrop),
-            // portrait poster otherwise. Crossfade so the art swap isn't a hard cut.
-            val art = if (focused && !backdropUrl.isNullOrBlank()) backdropUrl else posterUrl
-            Crossfade(targetState = art, label = "nfCardArt") { model ->
-                if (!model.isNullOrBlank()) {
-                    AsyncImage(
-                        model = model,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+            // Base layer: the poster, ALWAYS drawn. Widening into focus therefore never flashes an
+            // empty card, and it holds the frame while the backdrop loads on top.
+            if (!posterUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = posterUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            // Focused overlay: the landscape backdrop, faded in OVER the poster once it's ready (Coil
+            // crossfade). One image, no hard swap — a slow load reads as a graceful fade instead of a
+            // jump, and the poster underneath means there's never a blank frame. The backdrop URL is
+            // supplied only once resolved (see FocusDetail), so there's no provider→TMDB re-swap either.
+            if (focused && !backdropUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalPlatformContext.current)
+                        .data(backdropUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             if (focused) {
                 Box(

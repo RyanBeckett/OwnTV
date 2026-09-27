@@ -2189,8 +2189,9 @@ private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onP
                 items(movies, key = { it.id }) { movie ->
                     NetflixPosterCard(
                         posterUrl = movie.posterUrl,
-                        // Focused card is landscape → give it the better TMDB backdrop once resolved.
-                        backdropUrl = if (movie.id == detail?.id) detail?.backdrop ?: movie.backdropUrl else movie.backdropUrl,
+                        // Only the focused card shows a backdrop, and only the resolved one — null until
+                        // then, so the poster holds and the backdrop fades in once, cleanly.
+                        backdropUrl = if (movie.id == detail?.id) detail?.backdrop else null,
                         title = movie.name,
                         meta = posterMeta(movie.year, movie.rating?.toDouble()),
                         onClick = { onPlay(movie.id) },
@@ -2220,7 +2221,7 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, d
                 items(series, key = { it.id }) { s ->
                     NetflixPosterCard(
                         posterUrl = s.posterUrl,
-                        backdropUrl = if (s.id == detail?.id) detail?.backdrop ?: s.backdropUrl else s.backdropUrl,
+                        backdropUrl = if (s.id == detail?.id) detail?.backdrop else null,
                         title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {}, onFocus = { onFocus(s) },
                     )
                 }
