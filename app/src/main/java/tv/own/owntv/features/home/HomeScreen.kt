@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -127,7 +128,8 @@ import tv.own.owntv.core.metadata.MetadataImages
 import tv.own.owntv.core.database.entity.MovieEntity
 import tv.own.owntv.core.database.entity.SeriesEntity
 import tv.own.owntv.core.trending.ProviderVariantParser
-import tv.own.owntv.features.browse.LeadingEdgeBringIntoView
+import tv.own.owntv.features.browse.HeroPeek
+import tv.own.owntv.features.browse.rememberLeadingEdgeBringIntoViewSpec
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.compose.foundation.layout.widthIn
@@ -317,6 +319,8 @@ fun HomeScreen(
     var catalogFocusedId by remember(state.catalogTopMovies) { mutableStateOf<Long?>(null) }
     // Focused item's name, tracked immediately so the hero title never lags behind selection.
     var catalogFocusedTitle by remember(state.catalogTopMovies) { mutableStateOf<String?>(null) }
+    // Whether the focused catalogue tile is the first in its row (rests flush-left → hero has no inset).
+    var catalogFocusedIsFirst by remember(state.catalogTopMovies) { mutableStateOf(false) }
     val catalogDetail by vm.focusDetail.collectAsStateWithLifecycle()
     val featuredBillboards = remember(state.catalogTopMovies) {
         state.catalogTopMovies.filter { !it.backdropUrl.isNullOrBlank() }
@@ -387,8 +391,9 @@ fun HomeScreen(
                     onPlay = { onPlayMovie(it, 0L) },
                     heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-movies" },
                     heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
+                    heroInset = if (catalogFocusedIsFirst) 0.dp else HeroPeek,
                     detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-top-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
+                    onFocus = { catalogFocusedRow = "nf-top-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; catalogFocusedIsFirst = state.catalogTopMovies.firstOrNull()?.id == it.id; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -400,8 +405,9 @@ fun HomeScreen(
                     onPlay = { onPlayMovie(it, 0L) },
                     heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-new-movies" },
                     heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
+                    heroInset = if (catalogFocusedIsFirst) 0.dp else HeroPeek,
                     detail = catalogDetail.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-new-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
+                    onFocus = { catalogFocusedRow = "nf-new-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; catalogFocusedIsFirst = state.catalogNewMovies.firstOrNull()?.id == it.id; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -412,8 +418,9 @@ fun HomeScreen(
                     series = state.catalogTopSeries,
                     heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-series" },
                     heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
+                    heroInset = if (catalogFocusedIsFirst) 0.dp else HeroPeek,
                     detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-top-series"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogSeries(it) },
+                    onFocus = { catalogFocusedRow = "nf-top-series"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; catalogFocusedIsFirst = state.catalogTopSeries.firstOrNull()?.id == it.id; vm.onFocusCatalogSeries(it) },
                 )
             }
         }
@@ -2190,6 +2197,7 @@ private fun NetflixCatalogMovieRow(
     onPlay: (Long) -> Unit,
     heroTitle: String? = null,
     heroBackdrop: String? = null,
+    heroInset: Dp = HeroPeek,
     detail: HomeViewModel.FocusDetail? = null,
     onFocus: (MovieEntity) -> Unit = {},
 ) {
@@ -2202,7 +2210,7 @@ private fun NetflixCatalogMovieRow(
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
         Box {
-            CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
+            CompositionLocalProvider(LocalBringIntoViewSpec provides rememberLeadingEdgeBringIntoViewSpec()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(movies, key = { it.id }) { movie ->
                         NetflixPosterCard(
@@ -2215,7 +2223,12 @@ private fun NetflixCatalogMovieRow(
                 }
             }
             if (heroTitle != null) {
-                FocusHero(backdrop = heroBackdrop, title = heroTitle, modifier = Modifier.align(Alignment.TopStart))
+                val animatedInset by animateDpAsState(targetValue = heroInset, label = "heroInset")
+                FocusHero(
+                    backdrop = heroBackdrop,
+                    title = heroTitle,
+                    modifier = Modifier.align(Alignment.TopStart).offset(x = animatedInset),
+                )
             }
         }
         CatalogRowDetail(detail)
@@ -2230,6 +2243,7 @@ private fun NetflixCatalogSeriesRow(
     series: List<SeriesEntity>,
     heroTitle: String? = null,
     heroBackdrop: String? = null,
+    heroInset: Dp = HeroPeek,
     detail: HomeViewModel.FocusDetail? = null,
     onFocus: (SeriesEntity) -> Unit = {},
 ) {
@@ -2242,7 +2256,7 @@ private fun NetflixCatalogSeriesRow(
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
         Box {
-            CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
+            CompositionLocalProvider(LocalBringIntoViewSpec provides rememberLeadingEdgeBringIntoViewSpec()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(series, key = { it.id }) { s ->
                         NetflixPosterCard(
@@ -2255,7 +2269,12 @@ private fun NetflixCatalogSeriesRow(
                 }
             }
             if (heroTitle != null) {
-                FocusHero(backdrop = heroBackdrop, title = heroTitle, modifier = Modifier.align(Alignment.TopStart))
+                val animatedInset by animateDpAsState(targetValue = heroInset, label = "heroInset")
+                FocusHero(
+                    backdrop = heroBackdrop,
+                    title = heroTitle,
+                    modifier = Modifier.align(Alignment.TopStart).offset(x = animatedInset),
+                )
             }
         }
         CatalogRowDetail(detail)

@@ -1,5 +1,6 @@
 package tv.own.owntv.features.browse
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -17,16 +18,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
@@ -61,6 +66,8 @@ fun NetflixBrowseScreen(
     var focusedId by remember { mutableStateOf<Long?>(null) }
     // The focused item's name, tracked immediately (no debounce) so the hero's title never lags.
     var focusedTitle by remember { mutableStateOf<String?>(null) }
+    // Whether the focused tile is the first in its row — it rests flush-left, so its hero has no inset.
+    var focusedIsFirst by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier
@@ -78,14 +85,15 @@ fun NetflixBrowseScreen(
                     title = row.title,
                     heroTitle = focusedTitle.takeIf { isRowFocused },
                     heroBackdrop = detail?.backdrop?.takeIf { isRowFocused && detail?.id == focusedId },
+                    heroInset = if (focusedIsFirst) 0.dp else HeroPeek,
                     detail = detail.takeIf { isRowFocused && detail?.id == focusedId },
                 ) {
-                    items(row.items, key = { it.id }) { m ->
+                    itemsIndexed(row.items, key = { _, it -> it.id }) { index, m ->
                         NetflixPosterCard(
                             posterUrl = m.posterUrl,
                             title = m.name,
                             onClick = { onPlay(m.id) },
-                            onFocus = { focusedRow = row.title; focusedId = m.id; focusedTitle = m.name; vm.onFocusMovie(m) },
+                            onFocus = { focusedRow = row.title; focusedId = m.id; focusedTitle = m.name; focusedIsFirst = index == 0; vm.onFocusMovie(m) },
                         )
                     }
                 }
@@ -97,14 +105,15 @@ fun NetflixBrowseScreen(
                     title = row.title,
                     heroTitle = focusedTitle.takeIf { isRowFocused },
                     heroBackdrop = detail?.backdrop?.takeIf { isRowFocused && detail?.id == focusedId },
+                    heroInset = if (focusedIsFirst) 0.dp else HeroPeek,
                     detail = detail.takeIf { isRowFocused && detail?.id == focusedId },
                 ) {
-                    items(row.items, key = { it.id }) { s ->
+                    itemsIndexed(row.items, key = { _, it -> it.id }) { index, s ->
                         NetflixPosterCard(
                             posterUrl = s.posterUrl,
                             title = s.name,
                             onClick = { onPlay(s.id) },
-                            onFocus = { focusedRow = row.title; focusedId = s.id; focusedTitle = s.name; vm.onFocusSeries(s) },
+                            onFocus = { focusedRow = row.title; focusedId = s.id; focusedTitle = s.name; focusedIsFirst = index == 0; vm.onFocusSeries(s) },
                         )
                     }
                 }
@@ -120,6 +129,7 @@ private fun CategoryRowWithDetail(
     title: String,
     heroTitle: String?,
     heroBackdrop: String?,
+    heroInset: Dp,
     detail: NetflixBrowseViewModel.FocusDetail?,
     content: LazyListScope.() -> Unit,
 ) {
@@ -131,19 +141,23 @@ private fun CategoryRowWithDetail(
             color = OwnTVTheme.colors.onSurface,
             modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
         )
-        // The strip of portrait posters (pinned-left via LeadingEdgeBringIntoView) with the row's ONE
-        // persistent hero overlaid at that pinned-left gap. The focused poster reserves the landscape
-        // width; the hero fills it and crossfades between backdrops as selection moves — drawn once
-        // for the row, never rebuilt per tile.
+        // The strip of portrait posters (parked a peek in from the start) with the row's ONE persistent
+        // hero overlaid on the focused slot. The focused poster reserves the landscape width; the hero
+        // fills it and crossfades between backdrops as selection moves — drawn once for the row, never
+        // rebuilt per tile. [heroInset] keeps the hero over the slot: 0 for the flush-left first item,
+        // HeroPeek otherwise (where a sliver of the previous tile shows to its left).
         Box {
-            CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
+            CompositionLocalProvider(LocalBringIntoViewSpec provides rememberLeadingEdgeBringIntoViewSpec()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), content = content)
             }
             if (heroTitle != null) {
+                // Animate the inset so landing on the flush-left first item (inset 0) glides rather
+                // than snapping the hero sideways.
+                val animatedInset by animateDpAsState(targetValue = heroInset, label = "heroInset")
                 FocusHero(
                     backdrop = heroBackdrop,
                     title = heroTitle,
-                    modifier = Modifier.align(Alignment.TopStart),
+                    modifier = Modifier.align(Alignment.TopStart).offset(x = animatedInset),
                 )
             }
         }
@@ -176,13 +190,27 @@ private fun CategoryRowWithDetail(
 }
 
 /**
- * A [BringIntoViewSpec] that scrolls the focused item's leading (left) edge to the row start and keeps
- * it there — the selection stays put and the whole row moves under it, the way Netflix rails behave.
- * It reports the distance from the leading edge only (never the trailing edge), so a card growing wider
- * on focus expands into the space to its right instead of pushing itself off the screen edge, and its
- * mid-animation size changes never re-trigger a scroll.
+ * How far in from the row's start the focused item rests. The whole row moves under it, so the
+ * selection stays in this fixed spot — and the gap to its left reveals a sliver of the previous item,
+ * the way Netflix rails do. The very first item can't scroll before the start, so it sits flush-left
+ * with nothing to its left; the hero's [heroInset] mirrors this (0 for the first item, [HeroPeek]
+ * otherwise) so it always sits exactly over the focused item's slot.
+ */
+internal val HeroPeek: Dp = 64.dp
+
+/**
+ * A [BringIntoViewSpec] that parks the focused item's leading (left) edge [peek] in from the row
+ * start. It uses the leading edge only (never the trailing edge), so a card growing wider on focus
+ * expands into the space to its right rather than off the screen, and mid-animation size changes never
+ * re-trigger a scroll. The first item clamps to the true start (nothing scrolls before it).
  */
 @OptIn(ExperimentalFoundationApi::class)
-internal val LeadingEdgeBringIntoView = object : BringIntoViewSpec {
-    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = offset
+@Composable
+internal fun rememberLeadingEdgeBringIntoViewSpec(peek: Dp = HeroPeek): BringIntoViewSpec {
+    val peekPx = with(LocalDensity.current) { peek.toPx() }
+    return remember(peekPx) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = offset - peekPx
+        }
+    }
 }

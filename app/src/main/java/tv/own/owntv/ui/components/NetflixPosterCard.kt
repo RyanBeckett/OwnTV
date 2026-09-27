@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +38,7 @@ import tv.own.owntv.ui.theme.OwnTVTheme
 import tv.own.owntv.ui.theme.gradientWash
 
 /** Shared height for the Netflix poster tiles and the [FocusHero] that overlays the focused one. */
-val NetflixCardHeight: Dp = 190.dp
+val NetflixCardHeight: Dp = 232.dp
 
 /**
  * A portrait poster tile for the Netflix Home and Movies/Series rows. On focus it does not draw its
@@ -66,6 +67,9 @@ fun NetflixPosterCard(
         focusedScale = 1f,
         unfocusedContainerColor = Color.Transparent,
         focusedContainerColor = Color.Transparent,
+        // No focus ring on the tiles: the persistent hero is the one focus indicator. A ring here would
+        // jump onto the next tile before the row scrolls it under the hero — two cursors out of sync.
+        showFocusBorder = false,
         modifier = modifier
             .height(height)
             .onFocusChanged { if (it.hasFocus) onFocus() },
@@ -124,7 +128,9 @@ fun FocusHero(
             .width(landscapeWidth)
             .height(height)
             .clip(RoundedCornerShape(8.dp))
-            .background(colors.surfaceContainerHigh),
+            .background(colors.surfaceContainerHigh)
+            // Subtle white rim so the focused hero reads as "selected" against the dark wall.
+            .border(2.dp, Color.White.copy(alpha = 0.75f), RoundedCornerShape(8.dp)),
     ) {
         shown?.let { url ->
             AsyncImage(
