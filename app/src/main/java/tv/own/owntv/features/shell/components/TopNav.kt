@@ -64,7 +64,9 @@ fun TopNav(
     val colors = OwnTVTheme.colors
     val scope = rememberCoroutineScope()
     var hasFocus by remember { mutableStateOf(false) }
-    val tabs = MainSection.browseOrder.filter { it in visibleSections }
+    // More closes out the strip (it is the hub that holds Settings, Favourites, History, Backup…),
+    // exactly as it did as the last item on the old vertical rail.
+    val tabs = (MainSection.browseOrder.filter { it in visibleSections } + MainSection.MORE).distinct()
     // Search maps onto Home for the "which tab is lit" question (Search has no tab of its own), and
     // Settings lives behind More — mirror the Sidebar's focusSection fallback.
     val activeSection = when {
