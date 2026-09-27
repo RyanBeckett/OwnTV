@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -116,6 +117,8 @@ import tv.own.owntv.ui.format.localizedInteger
 import tv.own.owntv.features.shell.components.MediaDetailsScreen
 import tv.own.owntv.features.shell.components.MediaDetailsUi
 import tv.own.owntv.core.metadata.MetadataImages
+import tv.own.owntv.core.database.entity.MovieEntity
+import tv.own.owntv.core.database.entity.SeriesEntity
 import tv.own.owntv.core.trending.ProviderVariantParser
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -288,7 +291,12 @@ fun HomeScreen(
         AllRowsHiddenState(modifier = modifier.fillMaxSize())
         return
     }
-    if (showEmptyState) {
+    // EXPERIMENTAL Netflix Home: the catalogue rows fill Home even with no history, so the empty
+    // state only stands when there is genuinely nothing — no history rows AND no catalogue.
+    val hasCatalog = state.catalogTopMovies.isNotEmpty() ||
+        state.catalogNewMovies.isNotEmpty() ||
+        state.catalogTopSeries.isNotEmpty()
+    if (showEmptyState && !hasCatalog) {
         EmptyHomeState(modifier = modifier.fillMaxSize())
         return
     }
@@ -326,6 +334,39 @@ fun HomeScreen(
         contentPadding = PaddingValues(vertical = Dimens.ScreenPaddingV),
         verticalArrangement = Arrangement.spacedBy(Dimens.GapLarge),
     ) {
+        // EXPERIMENTAL Netflix Home — a featured hero and catalogue poster rows across the top, above
+        // the stock history/trending rows. DOWN from the top nav lands on the hero's Play button.
+        state.catalogTopMovies.firstOrNull()?.let { featured ->
+            item(key = "nf-hero") {
+                NetflixHomeHero(movie = featured, onPlay = { onPlayMovie(it, 0L) })
+            }
+        }
+        if (state.catalogTopMovies.isNotEmpty()) {
+            item(key = "nf-top-movies") {
+                NetflixCatalogMovieRow(
+                    title = stringResource(R.string.home_nf_top_movies),
+                    movies = state.catalogTopMovies,
+                    onPlay = { onPlayMovie(it, 0L) },
+                )
+            }
+        }
+        if (state.catalogNewMovies.isNotEmpty()) {
+            item(key = "nf-new-movies") {
+                NetflixCatalogMovieRow(
+                    title = stringResource(R.string.home_nf_new_movies),
+                    movies = state.catalogNewMovies,
+                    onPlay = { onPlayMovie(it, 0L) },
+                )
+            }
+        }
+        if (state.catalogTopSeries.isNotEmpty()) {
+            item(key = "nf-top-series") {
+                NetflixCatalogSeriesRow(
+                    title = stringResource(R.string.home_nf_top_series),
+                    series = state.catalogTopSeries,
+                )
+            }
+        }
         itemsIndexed(renderRows, key = { _, row -> row.name }) { index, row ->
             val firstItemFocusRequester = rowFocusRequester(row)
             val nextRowIndex = renderRows
@@ -2080,6 +2121,171 @@ private fun SkeletonRowPlaceholder(
                         .background(placeholder),
                 )
             }
+        }
+    }
+}
+
+// ============================================================================================
+// EXPERIMENTAL Netflix Home — a featured hero and catalogue poster rows. Self-contained; remove
+// these composables and their call sites in the LazyColumn to drop the feature.
+// ============================================================================================
+
+/** Big featured banner from a catalogue title: backdrop, title, meta, plot and a Play button. */
+@Composable
+private fun NetflixHomeHero(movie: MovieEntity, onPlay: (Long) -> Unit) {
+    val colors = OwnTVTheme.colors
+    val art = movie.backdropUrl?.takeIf { it.isNotBlank() } ?: movie.posterUrl
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(440.dp)
+            .clip(RoundedCornerShape(16.dp)),
+    ) {
+        if (!art.isNullOrBlank()) {
+            AsyncImage(
+                model = art,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        // Left + bottom washes so the text stays legible over any artwork (Netflix's fade).
+        Box(
+            Modifier.fillMaxSize().gradientWash(
+                vertical = false,
+                0f to Color.Black.copy(alpha = 0.85f),
+                0.45f to Color.Black.copy(alpha = 0.35f),
+                1f to Color.Transparent,
+            ),
+        )
+        Box(
+            Modifier.fillMaxSize().gradientWash(
+                vertical = true,
+                0.5f to Color.Transparent,
+                1f to Color.Black.copy(alpha = 0.9f),
+            ),
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 44.dp, end = 44.dp, bottom = 36.dp)
+                .fillMaxWidth(0.55f),
+        ) {
+            Text(
+                movie.name,
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                movie.year?.takeIf { it > 0 }?.let {
+                    Text(it.toString(), style = MaterialTheme.typography.titleSmall, color = Color.White)
+                }
+                movie.rating?.takeIf { it > 0 }?.let {
+                    Text(stringResource(R.string.content_rating, it), style = MaterialTheme.typography.titleSmall, color = colors.primary, fontWeight = FontWeight.Bold)
+                }
+            }
+            movie.plot?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(18.dp))
+            OwnTVButton(
+                label = stringResource(R.string.content_action_play),
+                icon = OwnTVIcon.PLAY,
+                onClick = { onPlay(movie.id) },
+                style = OwnTVButtonStyle.PRIMARY,
+            )
+        }
+    }
+}
+
+/** A titled horizontal poster row of catalogue movies. */
+@Composable
+private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onPlay: (Long) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = OwnTVTheme.colors.onSurface,
+            modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(movies, key = { it.id }) { movie ->
+                NetflixPosterCard(
+                    poster = movie.posterUrl,
+                    label = movie.name,
+                    onClick = { onPlay(movie.id) },
+                )
+            }
+        }
+    }
+}
+
+/** A titled horizontal poster row of catalogue series (browse-only for now). */
+@Composable
+private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = OwnTVTheme.colors.onSurface,
+            modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(series, key = { it.id }) { s ->
+                NetflixPosterCard(poster = s.posterUrl, label = s.name, onClick = {})
+            }
+        }
+    }
+}
+
+/** One poster tile: 2:3 artwork with a title caption; focusable, click plays/opens. */
+@Composable
+private fun NetflixPosterCard(poster: String?, label: String, onClick: () -> Unit) {
+    val colors = OwnTVTheme.colors
+    FocusableSurface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.width(124.dp),
+    ) { _ ->
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(2f / 3f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.surfaceContainerHigh),
+            ) {
+                if (!poster.isNullOrBlank()) {
+                    AsyncImage(
+                        model = poster,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 2.dp),
+            )
         }
     }
 }

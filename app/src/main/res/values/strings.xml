@@ -5,4 +5,7 @@
     <string name="content_search_series">Search series…</string>
     <string name="settings_metadata_show_cast">Cast &amp; actors</string>
     <string name="settings_metadata_show_cast_desc">Show actor photos and names on film and series details.</string>
+    <string name="home_nf_top_movies">Top Rated Movies</string>
+    <string name="home_nf_new_movies">Recently Added</string>
+    <string name="home_nf_top_series">Popular Series</string>
 </resources>

@@ -32,6 +32,10 @@ import tv.own.owntv.core.database.dao.SourceDao
 import tv.own.owntv.core.database.dao.TrendingDao
 import tv.own.owntv.core.database.dao.resolveExistingProfileId
 import tv.own.owntv.core.database.entity.ChannelEntity
+import tv.own.owntv.core.database.entity.MovieEntity
+import tv.own.owntv.core.database.entity.SeriesEntity
+import tv.own.owntv.core.repository.activeProfileSources
+import androidx.paging.PagingSource
 import tv.own.owntv.core.database.entity.MetadataCacheEntity
 import tv.own.owntv.core.home.GuideSliceState
 import tv.own.owntv.core.home.HeroItem
@@ -60,6 +64,9 @@ data class TrendingDetailsMetadata(
     val tmdbWins: Boolean,
 )
 
+/** How many titles each Netflix-style catalogue row on Home loads. */
+private const val CATALOG_ROW_SIZE = 24
+
 @Immutable
 data class HomeUiState(
     val trendingItems: List<TrendingHomeItem> = emptyList(),
@@ -74,6 +81,10 @@ data class HomeUiState(
     val continuationArtwork: Map<String, String> = emptyMap(),
     val recentLive: List<ChannelEntity> = emptyList(),
     val favoriteLive: List<ChannelEntity> = emptyList(),
+    // EXPERIMENTAL Netflix Home: catalogue rows that fill Home without any watch history.
+    val catalogTopMovies: List<MovieEntity> = emptyList(),
+    val catalogNewMovies: List<MovieEntity> = emptyList(),
+    val catalogTopSeries: List<SeriesEntity> = emptyList(),
     val config: HomeConfig = HomeConfig(),
     val recentGuide: GuideSliceState = GuideSliceState(),
     val favoriteGuide: GuideSliceState = GuideSliceState(),
@@ -309,10 +320,26 @@ class HomeViewModel(
      * stays here is what only a television does with it: the caches keyed to the previous pass, and the
      * hero carousel's position.
      */
+    /** First page of a PagingSource as a plain list — lets Home show catalogue rows without the paging UI. */
+    private suspend fun <T : Any> firstPage(src: PagingSource<Int, T>, n: Int): List<T> =
+        (src.load(PagingSource.LoadParams.Refresh(key = null, loadSize = n, placeholdersEnabled = false))
+            as? PagingSource.LoadResult.Page)?.data ?: emptyList()
+
     private suspend fun loadHomeData(profileId: Long) {
         val previous = _uiState.value
         val data = feed.load(profileId)
+        // EXPERIMENTAL Netflix Home — catalogue rows straight from the library, so Home is full on a
+        // fresh profile with no watch history. Top-rated and newest for Movies, top-rated for Series.
+        val aps = activeProfileSources(settings, sourceDao).first()
+        val movieIds = aps.movieSourceIds.ifEmpty { listOf(-1L) }
+        val seriesIds = aps.seriesSourceIds.ifEmpty { listOf(-1L) }
+        val topMovies = firstPage(movieDao.pagingAllRating(movieIds), CATALOG_ROW_SIZE)
+        val newMovies = firstPage(movieDao.pagingAllDateAdded(movieIds), CATALOG_ROW_SIZE)
+        val topSeries = firstPage(seriesDao.pagingAllRating(seriesIds), CATALOG_ROW_SIZE)
         _uiState.value = HomeUiState(
+            catalogTopMovies = topMovies,
+            catalogNewMovies = newMovies,
+            catalogTopSeries = topSeries,
             trendingItems = data.trendingItems,
             activeTrendingIndex = previous.activeTrendingIndex
                 .coerceIn(0, (data.trendingItems.size - 1).coerceAtLeast(0)),
