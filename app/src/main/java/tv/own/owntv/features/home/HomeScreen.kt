@@ -117,8 +117,6 @@ import tv.own.owntv.ui.components.InAppToast
 import tv.own.owntv.ui.components.TrailerPlayerScreen
 import tv.own.owntv.ui.components.rememberInAppToast
 import tv.own.owntv.ui.components.PosterCard
-import tv.own.owntv.ui.components.ContentPanelFill
-import tv.own.owntv.ui.components.roundedPanel
 import tv.own.owntv.ui.format.formatSystemTime
 import tv.own.owntv.ui.theme.Dimens
 import tv.own.owntv.core.theme.GlassSurface
@@ -366,7 +364,6 @@ fun HomeScreen(
       LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .roundedPanel(fillColor = ContentPanelFill)
             .onFocusChanged { homeContentFocused = it.hasFocus; if (it.hasFocus) onChildFocused() }
             .focusGroup(),
         state = listState,
