@@ -101,6 +101,9 @@ import tv.own.owntv.core.model.HomeTrendingStyle
 import tv.own.owntv.player.HeroPreviewEngine
 import tv.own.owntv.ui.components.BrandLockup
 import tv.own.owntv.ui.components.FocusableSurface
+import tv.own.owntv.ui.components.BillboardItem
+import tv.own.owntv.ui.components.NetflixBillboard
+import tv.own.owntv.ui.components.toBillboard
 import tv.own.owntv.ui.components.NetflixPosterCard
 import tv.own.owntv.ui.components.OwnTVButton
 import tv.own.owntv.ui.components.OwnTVButtonStyle
@@ -303,6 +306,24 @@ fun HomeScreen(
         EmptyHomeState(modifier = modifier.fillMaxSize())
         return
     }
+    // Netflix focus billboard: the top hero reflects the poster under focus (year · rating · plot),
+    // rotating through the featured titles while nothing is focused.
+    var billboardFocus by remember(state.catalogTopMovies) { mutableStateOf<BillboardItem?>(null) }
+    val featuredBillboards = remember(state.catalogTopMovies) {
+        state.catalogTopMovies.filter { !it.backdropUrl.isNullOrBlank() }
+            .ifEmpty { state.catalogTopMovies }
+            .take(6)
+            .map { it.toBillboard() }
+    }
+    var heroRot by remember(featuredBillboards.size) { mutableStateOf(0) }
+    LaunchedEffect(featuredBillboards.size, billboardFocus) {
+        if (featuredBillboards.size > 1 && billboardFocus == null) {
+            while (true) {
+                delay(9000)
+                heroRot = (heroRot + 1) % featuredBillboards.size
+            }
+        }
+    }
 
     val hero = state.heroItems.getOrNull(state.activeHeroIndex)
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
@@ -339,13 +360,12 @@ fun HomeScreen(
     ) {
         // EXPERIMENTAL Netflix Home — a featured hero and catalogue poster rows across the top, above
         // the stock history/trending rows. DOWN from the top nav lands on the hero's Play button.
-        if (state.catalogTopMovies.isNotEmpty()) {
+        if (featuredBillboards.isNotEmpty()) {
             item(key = "nf-hero") {
-                // Feature only titles with a real backdrop — a portrait poster stretched full-width
-                // as a hero looks broken. Fall back to whatever's there if none have one.
-                val featured = state.catalogTopMovies.filter { !it.backdropUrl.isNullOrBlank() }
-                    .ifEmpty { state.catalogTopMovies }
-                NetflixHomeHero(movies = featured.take(6), onPlay = { onPlayMovie(it, 0L) })
+                NetflixBillboard(
+                    item = billboardFocus ?: featuredBillboards.getOrNull(heroRot),
+                    onPlay = { onPlayMovie(it, 0L) },
+                )
             }
         }
         if (state.catalogTopMovies.isNotEmpty()) {
@@ -354,6 +374,7 @@ fun HomeScreen(
                     title = stringResource(R.string.home_nf_top_movies),
                     movies = state.catalogTopMovies,
                     onPlay = { onPlayMovie(it, 0L) },
+                    onFocus = { billboardFocus = it.toBillboard() },
                 )
             }
         }
@@ -363,6 +384,7 @@ fun HomeScreen(
                     title = stringResource(R.string.home_nf_new_movies),
                     movies = state.catalogNewMovies,
                     onPlay = { onPlayMovie(it, 0L) },
+                    onFocus = { billboardFocus = it.toBillboard() },
                 )
             }
         }
@@ -371,6 +393,7 @@ fun HomeScreen(
                 NetflixCatalogSeriesRow(
                     title = stringResource(R.string.home_nf_top_series),
                     series = state.catalogTopSeries,
+                    onFocus = { billboardFocus = it.toBillboard() },
                 )
             }
         }
@@ -2137,106 +2160,10 @@ private fun SkeletonRowPlaceholder(
 // these composables and their call sites in the LazyColumn to drop the feature.
 // ============================================================================================
 
-/**
- * Big featured banner that rotates through [movies]: backdrop, title, meta, plot and a Play button.
- * The rotation pauses while the hero holds focus, so the Play button never slips out from under the
- * user mid-cycle; it resumes once focus leaves.
- */
-@Composable
-private fun NetflixHomeHero(movies: List<MovieEntity>, onPlay: (Long) -> Unit) {
-    val colors = OwnTVTheme.colors
-    var index by remember(movies) { mutableStateOf(0) }
-    var heroFocused by remember { mutableStateOf(false) }
-    LaunchedEffect(movies, heroFocused) {
-        if (movies.size <= 1 || heroFocused) return@LaunchedEffect
-        while (true) {
-            delay(9000)
-            index = (index + 1) % movies.size
-        }
-    }
-    val movie = movies.getOrNull(index.coerceIn(0, movies.lastIndex)) ?: return
-    val art = movie.backdropUrl?.takeIf { it.isNotBlank() } ?: movie.posterUrl
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(440.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .onFocusChanged { heroFocused = it.hasFocus },
-    ) {
-        // Backdrop crossfades between featured titles; the text + button below share the same [movie].
-        Crossfade(targetState = art, label = "nf-hero-backdrop") { url ->
-            if (!url.isNullOrBlank()) {
-                AsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-        // Left + bottom washes so the text stays legible over any artwork (Netflix's fade).
-        Box(
-            Modifier.fillMaxSize().gradientWash(
-                vertical = false,
-                0f to Color.Black.copy(alpha = 0.85f),
-                0.45f to Color.Black.copy(alpha = 0.35f),
-                1f to Color.Transparent,
-            ),
-        )
-        Box(
-            Modifier.fillMaxSize().gradientWash(
-                vertical = true,
-                0.5f to Color.Transparent,
-                1f to Color.Black.copy(alpha = 0.9f),
-            ),
-        )
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 44.dp, end = 44.dp, bottom = 36.dp)
-                .fillMaxWidth(0.55f),
-        ) {
-            Text(
-                movie.name,
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                movie.year?.takeIf { it > 0 }?.let {
-                    Text(it.toString(), style = MaterialTheme.typography.titleSmall, color = Color.White)
-                }
-                movie.rating?.takeIf { it > 0 }?.let {
-                    Text(stringResource(R.string.content_rating, it), style = MaterialTheme.typography.titleSmall, color = colors.primary, fontWeight = FontWeight.Bold)
-                }
-            }
-            movie.plot?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Spacer(Modifier.height(18.dp))
-            OwnTVButton(
-                label = stringResource(R.string.content_action_play),
-                icon = OwnTVIcon.PLAY,
-                onClick = { onPlay(movie.id) },
-                style = OwnTVButtonStyle.PRIMARY,
-            )
-        }
-    }
-}
 
 /** A titled horizontal poster row of catalogue movies. */
 @Composable
-private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onPlay: (Long) -> Unit) {
+private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onPlay: (Long) -> Unit, onFocus: (MovieEntity) -> Unit = {}) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             title,
@@ -2252,15 +2179,16 @@ private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onP
                     title = movie.name,
                     meta = posterMeta(movie.year, movie.rating?.toDouble()),
                     onClick = { onPlay(movie.id) },
+                    onFocus = { onFocus(movie) },
                 )
             }
         }
     }
 }
 
-/** A titled horizontal poster row of catalogue series (browse-only for now). */
+/** A titled horizontal poster row of catalogue series. */
 @Composable
-private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>) {
+private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, onFocus: (SeriesEntity) -> Unit = {}) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             title,
@@ -2271,7 +2199,7 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>) {
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(series, key = { it.id }) { s ->
-                NetflixPosterCard(posterUrl = s.posterUrl, title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {})
+                NetflixPosterCard(posterUrl = s.posterUrl, title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {}, onFocus = { onFocus(s) })
             }
         }
     }

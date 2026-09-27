@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +40,7 @@ fun NetflixPosterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     width: Dp = 132.dp,
+    onFocus: () -> Unit = {},
 ) {
     val colors = OwnTVTheme.colors
     FocusableSurface(
@@ -48,7 +50,9 @@ fun NetflixPosterCard(
         unfocusedContainerColor = Color.Transparent,
         focusedContainerColor = Color.Transparent,
         // Own fixed width so a poster carousel lays out correctly regardless of the caller.
-        modifier = modifier.width(width),
+        modifier = modifier
+            .width(width)
+            .onFocusChanged { if (it.hasFocus) onFocus() },
     ) { focused ->
         Box(
             modifier = Modifier
