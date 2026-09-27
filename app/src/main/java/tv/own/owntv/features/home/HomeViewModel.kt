@@ -22,6 +22,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -70,6 +71,13 @@ data class TrendingDetailsMetadata(
 
 /** How many titles each Netflix-style catalogue row on Home loads. */
 private const val CATALOG_ROW_SIZE = 24
+
+/**
+ * Settle delay before the focus detail resolves — much shorter than [MetadataRepository.FOCUS_DEBOUNCE_MS]
+ * (700ms). The screen already blanks the panel while focus is moving, so this only needs to be long
+ * enough to skip a fast D-pad sweep; once you pause, the (network-free) tier-1 detail shows almost at once.
+ */
+private const val FOCUS_SETTLE_MS = 180L
 
 @Immutable
 data class HomeUiState(
@@ -149,24 +157,39 @@ class HomeViewModel(
 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val focusDetail: StateFlow<FocusDetail?> = _focus
-        .debounce(MetadataRepository.FOCUS_DEBOUNCE_MS)
-        .mapLatest { req ->
-            when (req) {
-                null -> null
-                is FocusReq.Movie -> {
-                    val meta = runCatching { metadata.resolveMovie(req.m) }.getOrNull()
-                    FocusDetail(req.m.id, focusTags(focusGenres(meta?.genresJson), req.m.year ?: meta?.year, req.m.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.m.plot)
-                }
-                is FocusReq.Series -> {
-                    val meta = runCatching { metadata.resolveSeries(req.s) }.getOrNull()
-                    FocusDetail(req.s.id, focusTags(focusGenres(meta?.genresJson), req.s.year ?: meta?.year, req.s.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.s.plot)
-                }
-            }
+        .debounce(FOCUS_SETTLE_MS)
+        .transformLatest { req ->
+            // Tier 1 — instant: year/rating/plot are already on the entity, so show them the moment
+            // focus settles rather than leaving the panel blank until TMDB answers.
+            emit(instantFocusDetail(req))
+            // Tier 2 — upgrade: the TMDB resolve adds the genre tags (and a fuller synopsis) when it
+            // lands. transformLatest cancels this — including any in-flight network — if focus moves on.
+            emit(resolvedFocusDetail(req))
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun onFocusCatalogMovie(m: MovieEntity) { _focus.value = FocusReq.Movie(m) }
     fun onFocusCatalogSeries(s: SeriesEntity) { _focus.value = FocusReq.Series(s) }
+
+    /** Network-free detail straight off the entity (no genres yet) — the instant first paint. */
+    private fun instantFocusDetail(req: FocusReq?): FocusDetail? = when (req) {
+        null -> null
+        is FocusReq.Movie -> FocusDetail(req.m.id, focusTags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() })
+        is FocusReq.Series -> FocusDetail(req.s.id, focusTags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() })
+    }
+
+    /** Full detail including TMDB genres/synopsis — may hit the network on a first, uncached focus. */
+    private suspend fun resolvedFocusDetail(req: FocusReq?): FocusDetail? = when (req) {
+        null -> null
+        is FocusReq.Movie -> {
+            val meta = runCatching { metadata.resolveMovie(req.m) }.getOrNull()
+            FocusDetail(req.m.id, focusTags(focusGenres(meta?.genresJson), req.m.year ?: meta?.year, req.m.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.m.plot)
+        }
+        is FocusReq.Series -> {
+            val meta = runCatching { metadata.resolveSeries(req.s) }.getOrNull()
+            FocusDetail(req.s.id, focusTags(focusGenres(meta?.genresJson), req.s.year ?: meta?.year, req.s.rating?.toDouble() ?: meta?.rating), meta?.overview?.takeIf { it.isNotBlank() } ?: req.s.plot)
+        }
+    }
 
     private fun focusGenres(json: String?): List<String> {
         if (json.isNullOrBlank()) return emptyList()

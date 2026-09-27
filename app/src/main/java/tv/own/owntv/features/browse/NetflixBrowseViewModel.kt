@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
@@ -62,15 +62,31 @@ class NetflixBrowseViewModel(
 
     private val _focus = MutableStateFlow<FocusReq?>(null)
 
-    /** Resolves genres from the metadata cache (debounced, so settling on a poster does one lookup). */
+    /**
+     * Detail for the focused poster. Two tiers so the panel never sits blank waiting on TMDB: tier 1
+     * is built straight off the entity (year/rating/plot — no network) and shows the instant focus
+     * settles; tier 2 upgrades it with the genre tags (and a fuller synopsis) once the resolve lands,
+     * which only hits the network on a first, uncached focus. transformLatest cancels a superseded
+     * resolve — including any in-flight request — the moment focus moves on.
+     */
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val focusDetail: StateFlow<FocusDetail?> = _focus
-        .debounce(MetadataRepository.FOCUS_DEBOUNCE_MS)
-        .mapLatest { resolveDetail(it) }
+        .debounce(FOCUS_SETTLE_MS)
+        .transformLatest { req ->
+            emit(instantDetail(req))
+            emit(resolveDetail(req))
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun onFocusMovie(m: MovieEntity) { _focus.value = FocusReq.Movie(m) }
     fun onFocusSeries(s: SeriesEntity) { _focus.value = FocusReq.Series(s) }
+
+    /** Network-free detail straight off the entity (no genres yet) — the instant first paint. */
+    private fun instantDetail(req: FocusReq?): FocusDetail? = when (req) {
+        null -> null
+        is FocusReq.Movie -> FocusDetail(req.m.id, tags(emptyList(), req.m.year, req.m.rating?.toDouble()), req.m.plot?.takeIf { it.isNotBlank() })
+        is FocusReq.Series -> FocusDetail(req.s.id, tags(emptyList(), req.s.year, req.s.rating?.toDouble()), req.s.plot?.takeIf { it.isNotBlank() })
+    }
 
     private suspend fun resolveDetail(req: FocusReq?): FocusDetail? = when (req) {
         null -> null
@@ -174,5 +190,9 @@ class NetflixBrowseViewModel(
     companion object {
         const val MAX_ROWS = 15
         const val ROW_SIZE = 20
+        // Settle delay before resolving the focus detail — far shorter than the core's 700ms focus
+        // debounce. The screen blanks the panel while focus moves, so this only needs to outlast a
+        // fast D-pad sweep; on settle the network-free tier-1 detail paints almost immediately.
+        const val FOCUS_SETTLE_MS = 180L
     }
 }

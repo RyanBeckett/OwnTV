@@ -1,7 +1,9 @@
 package tv.own.owntv.ui.components
 
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,13 +66,18 @@ fun NetflixPosterCard(
             .height(height)
             .onFocusChanged { if (it.hasFocus) onFocus() },
     ) { focused ->
-        val animatedWidth by animateDpAsState(
-            targetValue = if (focused) landscapeWidth else portraitWidth,
-            label = "nfCardWidth",
-        )
+        // Grow smoothly INTO focus, but collapse INSTANTLY out of it. A de-focused card that animated
+        // its shrink would sit between the row start and the newly-focused card and drag it leftward
+        // mid-grow — that's the one-directional "bounce" moving right. Snapping the collapse keeps the
+        // row settled except for the single card that's growing, so both directions are smooth.
+        val cardWidth = remember { Animatable(portraitWidth, Dp.VectorConverter) }
+        LaunchedEffect(focused) {
+            if (focused) cardWidth.animateTo(landscapeWidth, animationSpec = tween(durationMillis = 220))
+            else cardWidth.snapTo(portraitWidth)
+        }
         Box(
             modifier = Modifier
-                .width(animatedWidth)
+                .width(cardWidth.value)
                 .fillMaxSize()
                 .clip(RoundedCornerShape(8.dp))
                 .background(colors.surfaceContainerHigh),
