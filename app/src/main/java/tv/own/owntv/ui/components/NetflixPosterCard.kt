@@ -1,8 +1,6 @@
 package tv.own.owntv.ui.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.VectorConverter
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -38,15 +36,22 @@ import tv.own.owntv.ui.theme.OwnTVTheme
 import tv.own.owntv.ui.theme.gradientWash
 
 /** Shared height for the Netflix poster tiles and the [FocusHero] that overlays the focused one. */
-val NetflixCardHeight: Dp = 232.dp
+val NetflixCardHeight: Dp = 248.dp
+
+/** Horizontal gap between tiles in a Netflix row. */
+val NetflixRowGap: Dp = 20.dp
+
+/** How many portrait tiles the hero covers. Its width is exactly that many tiles laid out edge to
+ *  edge, so it never half-covers a poster — the next visible tile sits a clean gap past its edge. */
+private const val HERO_SPAN = 2
 
 /**
- * A portrait poster tile for the Netflix Home and Movies/Series rows. On focus it does not draw its
- * own hover art — it simply reserves the landscape width (animated, so the tiles to its right slide
- * open rather than jump), opening a gap at the row's pinned-left position that the row's single
- * persistent [FocusHero] fills. Keeping the wide art in one persistent element — instead of every
- * tile morphing into and out of a landscape card — is what stops the backdrop reloading and jumping
- * on each selection.
+ * A fixed-size portrait poster tile for the Netflix Home and Movies/Series rows. It never changes
+ * width on focus — the row's single persistent [FocusHero] covers the focused tile (and one more),
+ * ending on a tile boundary so it never half-covers a poster. That's deliberate: if the focused tile
+ * grew its own width it would shove every tile to its right outward, so selection would read as the
+ * row EXPANDING rather than sliding. With every tile fixed, moving selection is a pure slide and the
+ * hero crossfades in place.
  */
 @Composable
 fun NetflixPosterCard(
@@ -59,7 +64,6 @@ fun NetflixPosterCard(
 ) {
     val colors = OwnTVTheme.colors
     val portraitWidth = height * 2 / 3
-    val landscapeWidth = height * 16 / 9
 
     FocusableSurface(
         onClick = onClick,
@@ -72,24 +76,15 @@ fun NetflixPosterCard(
         showFocusBorder = false,
         modifier = modifier
             .height(height)
+            .width(portraitWidth)
             .onFocusChanged { if (it.hasFocus) onFocus() },
-    ) { focused ->
-        // Grow the reserved width smoothly INTO focus (the tiles to the right slide open), collapse it
-        // INSTANTLY out of focus so a shrinking neighbour can't drag the focused tile mid-animation.
-        val cardWidth = remember { Animatable(portraitWidth, Dp.VectorConverter) }
-        LaunchedEffect(focused) {
-            if (focused) cardWidth.animateTo(landscapeWidth, animationSpec = tween(durationMillis = 220))
-            else cardWidth.snapTo(portraitWidth)
-        }
+    ) { _ ->
         Box(
             modifier = Modifier
-                .width(cardWidth.value)
                 .fillMaxSize()
                 .clip(RoundedCornerShape(8.dp))
                 .background(colors.surfaceContainerHigh),
         ) {
-            // The poster shows when idle; when focused this slot is covered by the row's FocusHero, so
-            // the poster underneath is just a safe fallback for the instant before the hero paints.
             if (!posterUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = posterUrl,
@@ -115,13 +110,19 @@ fun FocusHero(
     title: String?,
     modifier: Modifier = Modifier,
     height: Dp = NetflixCardHeight,
+    selected: Boolean = true,
 ) {
     val colors = OwnTVTheme.colors
-    val landscapeWidth = height * 16 / 9
+    // Exactly HERO_SPAN tiles wide (tiles + the gaps between them), so the hero's right edge lands on
+    // a tile boundary and never half-covers the next poster; that poster sits one clean gap beyond.
+    val landscapeWidth = height * 2 / 3 * HERO_SPAN + NetflixRowGap * (HERO_SPAN - 1)
     // Hold the last non-blank backdrop so moving to an item whose art hasn't resolved yet keeps
     // showing the previous one instead of flashing empty; Coil crossfades when the new one arrives.
     var shown by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(backdrop) { if (!backdrop.isNullOrBlank()) shown = backdrop }
+    // The white rim is the selection cue: it fades out when focus leaves the content (e.g. up to the
+    // top nav), so it's clear the selection is no longer on this row.
+    val rimAlpha by animateFloatAsState(if (selected) 0.85f else 0f, label = "heroRim")
 
     Box(
         modifier = modifier
@@ -129,8 +130,7 @@ fun FocusHero(
             .height(height)
             .clip(RoundedCornerShape(8.dp))
             .background(colors.surfaceContainerHigh)
-            // Subtle white rim so the focused hero reads as "selected" against the dark wall.
-            .border(2.dp, Color.White.copy(alpha = 0.75f), RoundedCornerShape(8.dp)),
+            .border(2.dp, Color.White.copy(alpha = rimAlpha), RoundedCornerShape(8.dp)),
     ) {
         shown?.let { url ->
             AsyncImage(

@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -107,6 +108,7 @@ import tv.own.owntv.ui.components.NetflixBillboard
 import tv.own.owntv.ui.components.toBillboard
 import tv.own.owntv.ui.components.FocusHero
 import tv.own.owntv.ui.components.NetflixPosterCard
+import tv.own.owntv.ui.components.NetflixRowGap
 import tv.own.owntv.ui.components.OwnTVButton
 import tv.own.owntv.ui.components.OwnTVButtonStyle
 import tv.own.owntv.ui.components.OwnTVIcon
@@ -314,13 +316,13 @@ fun HomeScreen(
     // rotating through the featured titles while nothing is focused.
     // Focus detail below the focused catalogue row (genre tags + synopsis), matching the browse screens.
     var catalogFocusedRow by remember(state.catalogTopMovies) { mutableStateOf<String?>(null) }
+    // Whether focus is anywhere in Home content — drives the catalogue hero's selection rim fade.
+    var homeContentFocused by remember { mutableStateOf(false) }
     // Id of the tile focused right now (no debounce). The detail below only shows once the debounced
     // lookup catches up to it, so fast scrolling leaves the panel blank instead of flashing stale data.
     var catalogFocusedId by remember(state.catalogTopMovies) { mutableStateOf<Long?>(null) }
     // Focused item's name, tracked immediately so the hero title never lags behind selection.
     var catalogFocusedTitle by remember(state.catalogTopMovies) { mutableStateOf<String?>(null) }
-    // Whether the focused catalogue tile is the first in its row (rests flush-left → hero has no inset).
-    var catalogFocusedIsFirst by remember(state.catalogTopMovies) { mutableStateOf(false) }
     val catalogDetail by vm.focusDetail.collectAsStateWithLifecycle()
     val featuredBillboards = remember(state.catalogTopMovies) {
         state.catalogTopMovies.filter { !it.backdropUrl.isNullOrBlank() }
@@ -365,7 +367,7 @@ fun HomeScreen(
         modifier = modifier
             .fillMaxSize()
             .roundedPanel(fillColor = ContentPanelFill)
-            .onFocusChanged { if (it.hasFocus) onChildFocused() }
+            .onFocusChanged { homeContentFocused = it.hasFocus; if (it.hasFocus) onChildFocused() }
             .focusGroup(),
         state = listState,
         contentPadding = PaddingValues(vertical = Dimens.ScreenPaddingV),
@@ -391,9 +393,9 @@ fun HomeScreen(
                     onPlay = { onPlayMovie(it, 0L) },
                     heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-movies" },
                     heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
-                    heroInset = if (catalogFocusedIsFirst) 0.dp else HeroPeek,
+                    heroSelected = homeContentFocused,
                     detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-top-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; catalogFocusedIsFirst = state.catalogTopMovies.firstOrNull()?.id == it.id; vm.onFocusCatalogMovie(it) },
+                    onFocus = { catalogFocusedRow = "nf-top-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -405,9 +407,9 @@ fun HomeScreen(
                     onPlay = { onPlayMovie(it, 0L) },
                     heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-new-movies" },
                     heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
-                    heroInset = if (catalogFocusedIsFirst) 0.dp else HeroPeek,
+                    heroSelected = homeContentFocused,
                     detail = catalogDetail.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-new-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; catalogFocusedIsFirst = state.catalogNewMovies.firstOrNull()?.id == it.id; vm.onFocusCatalogMovie(it) },
+                    onFocus = { catalogFocusedRow = "nf-new-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -418,9 +420,9 @@ fun HomeScreen(
                     series = state.catalogTopSeries,
                     heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-series" },
                     heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
-                    heroInset = if (catalogFocusedIsFirst) 0.dp else HeroPeek,
+                    heroSelected = homeContentFocused,
                     detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-top-series"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; catalogFocusedIsFirst = state.catalogTopSeries.firstOrNull()?.id == it.id; vm.onFocusCatalogSeries(it) },
+                    onFocus = { catalogFocusedRow = "nf-top-series"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogSeries(it) },
                 )
             }
         }
@@ -2197,7 +2199,7 @@ private fun NetflixCatalogMovieRow(
     onPlay: (Long) -> Unit,
     heroTitle: String? = null,
     heroBackdrop: String? = null,
-    heroInset: Dp = HeroPeek,
+    heroSelected: Boolean = true,
     detail: HomeViewModel.FocusDetail? = null,
     onFocus: (MovieEntity) -> Unit = {},
 ) {
@@ -2211,7 +2213,11 @@ private fun NetflixCatalogMovieRow(
         )
         Box {
             CompositionLocalProvider(LocalBringIntoViewSpec provides rememberLeadingEdgeBringIntoViewSpec()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyRow(
+                    modifier = Modifier.focusRestorer(),
+                    horizontalArrangement = Arrangement.spacedBy(NetflixRowGap),
+                    contentPadding = PaddingValues(start = HeroPeek),
+                ) {
                     items(movies, key = { it.id }) { movie ->
                         NetflixPosterCard(
                             posterUrl = movie.posterUrl,
@@ -2223,11 +2229,11 @@ private fun NetflixCatalogMovieRow(
                 }
             }
             if (heroTitle != null) {
-                val animatedInset by animateDpAsState(targetValue = heroInset, label = "heroInset")
                 FocusHero(
                     backdrop = heroBackdrop,
                     title = heroTitle,
-                    modifier = Modifier.align(Alignment.TopStart).offset(x = animatedInset),
+                    selected = heroSelected,
+                    modifier = Modifier.align(Alignment.TopStart).offset(x = HeroPeek),
                 )
             }
         }
@@ -2243,7 +2249,7 @@ private fun NetflixCatalogSeriesRow(
     series: List<SeriesEntity>,
     heroTitle: String? = null,
     heroBackdrop: String? = null,
-    heroInset: Dp = HeroPeek,
+    heroSelected: Boolean = true,
     detail: HomeViewModel.FocusDetail? = null,
     onFocus: (SeriesEntity) -> Unit = {},
 ) {
@@ -2257,7 +2263,11 @@ private fun NetflixCatalogSeriesRow(
         )
         Box {
             CompositionLocalProvider(LocalBringIntoViewSpec provides rememberLeadingEdgeBringIntoViewSpec()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyRow(
+                    modifier = Modifier.focusRestorer(),
+                    horizontalArrangement = Arrangement.spacedBy(NetflixRowGap),
+                    contentPadding = PaddingValues(start = HeroPeek),
+                ) {
                     items(series, key = { it.id }) { s ->
                         NetflixPosterCard(
                             posterUrl = s.posterUrl,
@@ -2269,11 +2279,11 @@ private fun NetflixCatalogSeriesRow(
                 }
             }
             if (heroTitle != null) {
-                val animatedInset by animateDpAsState(targetValue = heroInset, label = "heroInset")
                 FocusHero(
                     backdrop = heroBackdrop,
                     title = heroTitle,
-                    modifier = Modifier.align(Alignment.TopStart).offset(x = animatedInset),
+                    selected = heroSelected,
+                    modifier = Modifier.align(Alignment.TopStart).offset(x = HeroPeek),
                 )
             }
         }

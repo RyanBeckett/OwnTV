@@ -1,6 +1,5 @@
 package tv.own.owntv.features.browse
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -18,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -28,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +39,7 @@ import org.koin.androidx.compose.koinViewModel
 import tv.own.owntv.core.model.MediaType
 import tv.own.owntv.ui.components.FocusHero
 import tv.own.owntv.ui.components.NetflixPosterCard
+import tv.own.owntv.ui.components.NetflixRowGap
 import tv.own.owntv.ui.components.trapVerticalFocusExit
 import tv.own.owntv.ui.theme.OwnTVTheme
 
@@ -66,13 +66,14 @@ fun NetflixBrowseScreen(
     var focusedId by remember { mutableStateOf<Long?>(null) }
     // The focused item's name, tracked immediately (no debounce) so the hero's title never lags.
     var focusedTitle by remember { mutableStateOf<String?>(null) }
-    // Whether the focused tile is the first in its row — it rests flush-left, so its hero has no inset.
-    var focusedIsFirst by remember { mutableStateOf(false) }
+    // Whether focus is anywhere in this content. When it leaves (e.g. up to the top nav) the hero's
+    // selection rim fades, so it's clear the selection is no longer on the row.
+    var contentFocused by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .onFocusChanged { if (it.hasFocus) onChildFocused() }
+            .onFocusChanged { contentFocused = it.hasFocus; if (it.hasFocus) onChildFocused() }
             .trapVerticalFocusExit()
             .focusGroup(),
         contentPadding = PaddingValues(horizontal = 32.dp, vertical = 20.dp),
@@ -85,15 +86,15 @@ fun NetflixBrowseScreen(
                     title = row.title,
                     heroTitle = focusedTitle.takeIf { isRowFocused },
                     heroBackdrop = detail?.backdrop?.takeIf { isRowFocused && detail?.id == focusedId },
-                    heroInset = if (focusedIsFirst) 0.dp else HeroPeek,
+                    heroSelected = contentFocused,
                     detail = detail.takeIf { isRowFocused && detail?.id == focusedId },
                 ) {
-                    itemsIndexed(row.items, key = { _, it -> it.id }) { index, m ->
+                    items(row.items, key = { it.id }) { m ->
                         NetflixPosterCard(
                             posterUrl = m.posterUrl,
                             title = m.name,
                             onClick = { onPlay(m.id) },
-                            onFocus = { focusedRow = row.title; focusedId = m.id; focusedTitle = m.name; focusedIsFirst = index == 0; vm.onFocusMovie(m) },
+                            onFocus = { focusedRow = row.title; focusedId = m.id; focusedTitle = m.name; vm.onFocusMovie(m) },
                         )
                     }
                 }
@@ -105,15 +106,15 @@ fun NetflixBrowseScreen(
                     title = row.title,
                     heroTitle = focusedTitle.takeIf { isRowFocused },
                     heroBackdrop = detail?.backdrop?.takeIf { isRowFocused && detail?.id == focusedId },
-                    heroInset = if (focusedIsFirst) 0.dp else HeroPeek,
+                    heroSelected = contentFocused,
                     detail = detail.takeIf { isRowFocused && detail?.id == focusedId },
                 ) {
-                    itemsIndexed(row.items, key = { _, it -> it.id }) { index, s ->
+                    items(row.items, key = { it.id }) { s ->
                         NetflixPosterCard(
                             posterUrl = s.posterUrl,
                             title = s.name,
                             onClick = { onPlay(s.id) },
-                            onFocus = { focusedRow = row.title; focusedId = s.id; focusedTitle = s.name; focusedIsFirst = index == 0; vm.onFocusSeries(s) },
+                            onFocus = { focusedRow = row.title; focusedId = s.id; focusedTitle = s.name; vm.onFocusSeries(s) },
                         )
                     }
                 }
@@ -129,7 +130,7 @@ private fun CategoryRowWithDetail(
     title: String,
     heroTitle: String?,
     heroBackdrop: String?,
-    heroInset: Dp,
+    heroSelected: Boolean,
     detail: NetflixBrowseViewModel.FocusDetail?,
     content: LazyListScope.() -> Unit,
 ) {
@@ -141,23 +142,27 @@ private fun CategoryRowWithDetail(
             color = OwnTVTheme.colors.onSurface,
             modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
         )
-        // The strip of portrait posters (parked a peek in from the start) with the row's ONE persistent
-        // hero overlaid on the focused slot. The focused poster reserves the landscape width; the hero
-        // fills it and crossfades between backdrops as selection moves — drawn once for the row, never
-        // rebuilt per tile. [heroInset] keeps the hero over the slot: 0 for the flush-left first item,
-        // HeroPeek otherwise (where a sliver of the previous tile shows to its left).
+        // The strip of portrait posters with the row's ONE persistent hero overlaid at a FIXED spot.
+        // The row's leading content padding = HeroPeek, so the focused tile always parks at that spot
+        // (even the first tile, which just has empty space to its left instead of a previous-tile
+        // sliver). The hero never moves — the row slides under it — so selection reads as one motion.
         Box {
             CompositionLocalProvider(LocalBringIntoViewSpec provides rememberLeadingEdgeBringIntoViewSpec()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), content = content)
+                LazyRow(
+                    // Restore the last-focused tile when returning to the row (e.g. after going up to
+                    // the nav and back), instead of jumping to a different tile and scrolling the row.
+                    modifier = Modifier.focusRestorer(),
+                    horizontalArrangement = Arrangement.spacedBy(NetflixRowGap),
+                    contentPadding = PaddingValues(start = HeroPeek),
+                    content = content,
+                )
             }
             if (heroTitle != null) {
-                // Animate the inset so landing on the flush-left first item (inset 0) glides rather
-                // than snapping the hero sideways.
-                val animatedInset by animateDpAsState(targetValue = heroInset, label = "heroInset")
                 FocusHero(
                     backdrop = heroBackdrop,
                     title = heroTitle,
-                    modifier = Modifier.align(Alignment.TopStart).offset(x = animatedInset),
+                    selected = heroSelected,
+                    modifier = Modifier.align(Alignment.TopStart).offset(x = HeroPeek),
                 )
             }
         }
