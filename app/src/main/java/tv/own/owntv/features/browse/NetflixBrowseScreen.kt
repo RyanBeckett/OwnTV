@@ -54,7 +54,7 @@ fun NetflixBrowseScreen(
             items(movieRows, key = { it.title }) { row ->
                 BrowseCategoryRow(row.title) {
                     items(row.items, key = { it.id }) { m ->
-                        NetflixPosterCard(posterUrl = m.posterUrl, title = m.name, meta = nfMeta(m.year, m.rating?.toDouble()), modifier = Modifier.width(132.dp), onClick = { onPlay(m.id) })
+                        NetflixPosterCard(posterUrl = m.posterUrl, title = m.name, meta = nfMeta(m.year, m.rating?.toDouble()), onClick = { onPlay(m.id) })
                     }
                 }
             }
@@ -62,7 +62,7 @@ fun NetflixBrowseScreen(
             items(seriesRows, key = { it.title }) { row ->
                 BrowseCategoryRow(row.title) {
                     items(row.items, key = { it.id }) { s ->
-                        NetflixPosterCard(posterUrl = s.posterUrl, title = s.name, meta = nfMeta(s.year, s.rating?.toDouble()), modifier = Modifier.width(132.dp), onClick = { onPlay(s.id) })
+                        NetflixPosterCard(posterUrl = s.posterUrl, title = s.name, meta = nfMeta(s.year, s.rating?.toDouble()), onClick = { onPlay(s.id) })
                     }
                 }
             }

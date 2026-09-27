@@ -341,7 +341,11 @@ fun HomeScreen(
         // the stock history/trending rows. DOWN from the top nav lands on the hero's Play button.
         if (state.catalogTopMovies.isNotEmpty()) {
             item(key = "nf-hero") {
-                NetflixHomeHero(movies = state.catalogTopMovies.take(6), onPlay = { onPlayMovie(it, 0L) })
+                // Feature only titles with a real backdrop — a portrait poster stretched full-width
+                // as a hero looks broken. Fall back to whatever's there if none have one.
+                val featured = state.catalogTopMovies.filter { !it.backdropUrl.isNullOrBlank() }
+                    .ifEmpty { state.catalogTopMovies }
+                NetflixHomeHero(movies = featured.take(6), onPlay = { onPlayMovie(it, 0L) })
             }
         }
         if (state.catalogTopMovies.isNotEmpty()) {

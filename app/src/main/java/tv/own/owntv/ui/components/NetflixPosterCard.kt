@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -36,6 +38,7 @@ fun NetflixPosterCard(
     meta: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    width: Dp = 132.dp,
 ) {
     val colors = OwnTVTheme.colors
     FocusableSurface(
@@ -44,7 +47,8 @@ fun NetflixPosterCard(
         focusedScale = 1.12f,
         unfocusedContainerColor = Color.Transparent,
         focusedContainerColor = Color.Transparent,
-        modifier = modifier,
+        // Own fixed width so a poster carousel lays out correctly regardless of the caller.
+        modifier = modifier.width(width),
     ) { focused ->
         Box(
             modifier = Modifier
