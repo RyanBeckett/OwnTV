@@ -19,6 +19,7 @@ import tv.own.owntv.core.database.dao.CategoryDao
 import tv.own.owntv.core.database.dao.MovieDao
 import tv.own.owntv.core.database.dao.SeriesDao
 import tv.own.owntv.core.database.dao.SourceDao
+import tv.own.owntv.core.database.dao.TrendingDao
 import tv.own.owntv.core.database.entity.MovieEntity
 import tv.own.owntv.core.database.entity.SeriesEntity
 import tv.own.owntv.core.metadata.MetadataImages
@@ -42,6 +43,7 @@ class NetflixBrowseViewModel(
     private val sourceDao: SourceDao,
     private val settings: SettingsRepository,
     private val metadata: MetadataRepository,
+    private val trendingDao: TrendingDao,
 ) : ViewModel() {
 
     data class MovieRow(val title: String, val items: List<MovieEntity>)
@@ -64,6 +66,17 @@ class NetflixBrowseViewModel(
 
     private val _seriesRows = MutableStateFlow<List<SeriesRow>>(emptyList())
     val seriesRows: StateFlow<List<SeriesRow>> = _seriesRows.asStateFlow()
+
+    /** Featured "critically acclaimed" title at the top of each screen — a random high-rated pick per
+     *  load, with its TMDB backdrop resolved so the billboard shows a proper 16:9 still. */
+    private val _featuredMovie = MutableStateFlow<tv.own.owntv.ui.components.BillboardItem?>(null)
+    val featuredMovie: StateFlow<tv.own.owntv.ui.components.BillboardItem?> = _featuredMovie.asStateFlow()
+    private val _featuredSeries = MutableStateFlow<tv.own.owntv.ui.components.BillboardItem?>(null)
+    val featuredSeries: StateFlow<tv.own.owntv.ui.components.BillboardItem?> = _featuredSeries.asStateFlow()
+
+    /** Top 10 movies this week — TMDB weekly trending matched to the library, in rank order. */
+    private val _top10Movies = MutableStateFlow<List<MovieEntity>>(emptyList())
+    val top10Movies: StateFlow<List<MovieEntity>> = _top10Movies.asStateFlow()
 
     private val _focus = MutableStateFlow<FocusReq?>(null)
 
@@ -156,11 +169,57 @@ class NetflixBrowseViewModel(
             rating?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
         )
 
+    /** A random title from the (rating-sorted) pool, preferring the acclaimed ones (rating >= 7.5). */
+    private fun pickAcclaimed(pool: List<MovieEntity>): MovieEntity? =
+        pool.filter { (it.rating?.toDouble() ?: 0.0) >= ACCLAIMED_MIN_RATING }.ifEmpty { pool }.randomOrNull()
+
+    @JvmName("pickAcclaimedSeries")
+    private fun pickAcclaimed(pool: List<SeriesEntity>): SeriesEntity? =
+        pool.filter { (it.rating?.toDouble() ?: 0.0) >= ACCLAIMED_MIN_RATING }.ifEmpty { pool }.randomOrNull()
+
     init { load() }
 
     private fun load() {
         viewModelScope.launch {
             val aps = activeProfileSources(settings, sourceDao).first()
+            val movieIds = aps.movieSourceIds.ifEmpty { listOf(-1L) }
+            val seriesIds = aps.seriesSourceIds.ifEmpty { listOf(-1L) }
+
+            // Featured hero: a random critically-acclaimed title, re-rolled each load. Its backdrop is
+            // resolved from TMDB (the provider rarely stores one) in the background so it doesn't hold
+            // up the rows below.
+            launch {
+                pickAcclaimed(firstPage(movieDao.pagingAllRating(movieIds), FEATURED_POOL))?.let { m ->
+                    val meta = runCatching { metadata.resolveMovie(m) }.getOrNull()
+                    _featuredMovie.value = tv.own.owntv.ui.components.BillboardItem(
+                        id = m.id, title = m.name,
+                        backdropUrl = MetadataImages.backdrop(meta?.backdropPath, size = "w1280") ?: m.backdropUrl,
+                        posterUrl = m.posterUrl, year = m.year ?: meta?.year,
+                        rating = m.rating?.toDouble() ?: meta?.rating,
+                        plot = meta?.overview?.takeIf { it.isNotBlank() } ?: m.plot,
+                    )
+                }
+            }
+            launch {
+                pickAcclaimed(firstPage(seriesDao.pagingAllRating(seriesIds), FEATURED_POOL))?.let { s ->
+                    val meta = runCatching { metadata.resolveSeries(s) }.getOrNull()
+                    _featuredSeries.value = tv.own.owntv.ui.components.BillboardItem(
+                        id = s.id, title = s.name,
+                        backdropUrl = MetadataImages.backdrop(meta?.backdropPath, size = "w1280") ?: s.backdropUrl,
+                        posterUrl = s.posterUrl, year = s.year ?: meta?.year,
+                        rating = s.rating?.toDouble() ?: meta?.rating,
+                        plot = meta?.overview?.takeIf { it.isNotBlank() } ?: s.plot,
+                    )
+                }
+            }
+
+            // Top 10 movies this week: the weekly TMDB trending items matched to the library, ranked.
+            val trendingMovies = trendingDao.getItemsForSources(aps.movieSourceIds)
+                .filter { it.mediaType == MediaType.MOVIE }
+                .sortedBy { it.trendingRank }
+                .take(10)
+            val movieById = movieDao.getByIds(trendingMovies.map { it.providerItemId }).associateBy { it.id }
+            _top10Movies.value = trendingMovies.mapNotNull { movieById[it.providerItemId] }
 
             val movieGroups = mergedGroups(categoryDao.observe(aps.movieSourceIds, MediaType.MOVIE).first())
             _movieRows.value = movieGroups.entries.take(MAX_ROWS).mapNotNull { (title, ids) ->
@@ -225,6 +284,8 @@ class NetflixBrowseViewModel(
         const val MAX_ROWS = 15
         const val ROW_SIZE = 60
         const val PREFETCH_AHEAD = 4
+        const val FEATURED_POOL = 25
+        const val ACCLAIMED_MIN_RATING = 7.5
         // Settle delay before resolving the focus detail — far shorter than the core's 700ms focus
         // debounce. The screen blanks the panel while focus moves, so this only needs to outlast a
         // fast D-pad sweep; on settle the network-free tier-1 detail paints almost immediately.

@@ -1,6 +1,7 @@
 package tv.own.owntv.features.browse
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -8,15 +9,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -25,19 +30,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import org.koin.androidx.compose.koinViewModel
 import tv.own.owntv.core.model.MediaType
+import tv.own.owntv.core.database.entity.MovieEntity
 import tv.own.owntv.ui.components.FocusHero
+import tv.own.owntv.ui.components.FocusableSurface
+import tv.own.owntv.ui.components.NetflixBillboard
+import tv.own.owntv.ui.components.NetflixCardHeight
 import tv.own.owntv.ui.components.NetflixPosterCard
 import tv.own.owntv.ui.components.NetflixRowGap
 import tv.own.owntv.ui.components.trapVerticalFocusExit
@@ -58,6 +75,10 @@ fun NetflixBrowseScreen(
     val vm: NetflixBrowseViewModel = koinViewModel()
     val movieRows by vm.movieRows.collectAsStateWithLifecycle()
     val seriesRows by vm.seriesRows.collectAsStateWithLifecycle()
+    val featuredMovie by vm.featuredMovie.collectAsStateWithLifecycle()
+    val featuredSeries by vm.featuredSeries.collectAsStateWithLifecycle()
+    val top10 by vm.top10Movies.collectAsStateWithLifecycle()
+    val featured = if (mediaType == MediaType.MOVIE) featuredMovie else featuredSeries
     val detail by vm.focusDetail.collectAsStateWithLifecycle()
     var focusedRow by remember { mutableStateOf<String?>(null) }
     // The id of whatever poster holds focus RIGHT NOW (updated immediately, no debounce). The detail
@@ -79,20 +100,32 @@ fun NetflixBrowseScreen(
         contentPadding = PaddingValues(horizontal = 32.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
+        // Featured "critically acclaimed" billboard at the top (rotates each load); Play focuses first.
+        if (featured != null) {
+            item(key = "nf-featured") {
+                NetflixBillboard(item = featured, onPlay = onPlay)
+            }
+        }
         if (mediaType == MediaType.MOVIE) {
+            if (top10.isNotEmpty()) {
+                item(key = "nf-top10") { Top10Row(movies = top10, onPlay = onPlay) }
+            }
             items(movieRows, key = { it.title }) { row ->
                 val isRowFocused = focusedRow == row.title
+                val firstReq = remember(row.title) { FocusRequester() }
                 CategoryRowWithDetail(
                     title = row.title,
                     heroTitle = focusedTitle.takeIf { isRowFocused },
                     heroBackdrop = detail?.backdrop?.takeIf { isRowFocused && detail?.id == focusedId },
                     heroSelected = contentFocused,
+                    firstItemRequester = firstReq,
                     detail = detail.takeIf { isRowFocused && detail?.id == focusedId },
                 ) {
-                    items(row.items, key = { it.id }) { m ->
+                    itemsIndexed(row.items, key = { _, it -> it.id }) { index, m ->
                         NetflixPosterCard(
                             posterUrl = m.posterUrl,
                             title = m.name,
+                            modifier = if (index == 0) Modifier.focusRequester(firstReq) else Modifier,
                             onClick = { onPlay(m.id) },
                             onFocus = { focusedRow = row.title; focusedId = m.id; focusedTitle = m.name; vm.onFocusMovie(m) },
                         )
@@ -102,17 +135,20 @@ fun NetflixBrowseScreen(
         } else {
             items(seriesRows, key = { it.title }) { row ->
                 val isRowFocused = focusedRow == row.title
+                val firstReq = remember(row.title) { FocusRequester() }
                 CategoryRowWithDetail(
                     title = row.title,
                     heroTitle = focusedTitle.takeIf { isRowFocused },
                     heroBackdrop = detail?.backdrop?.takeIf { isRowFocused && detail?.id == focusedId },
                     heroSelected = contentFocused,
+                    firstItemRequester = firstReq,
                     detail = detail.takeIf { isRowFocused && detail?.id == focusedId },
                 ) {
-                    items(row.items, key = { it.id }) { s ->
+                    itemsIndexed(row.items, key = { _, it -> it.id }) { index, s ->
                         NetflixPosterCard(
                             posterUrl = s.posterUrl,
                             title = s.name,
+                            modifier = if (index == 0) Modifier.focusRequester(firstReq) else Modifier,
                             onClick = { onPlay(s.id) },
                             onFocus = { focusedRow = row.title; focusedId = s.id; focusedTitle = s.name; vm.onFocusSeries(s) },
                         )
@@ -124,13 +160,14 @@ fun NetflixBrowseScreen(
 }
 
 /** A category title, its poster carousel with the persistent focus hero, and the focused item's detail below. */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun CategoryRowWithDetail(
     title: String,
     heroTitle: String?,
     heroBackdrop: String?,
     heroSelected: Boolean,
+    firstItemRequester: FocusRequester,
     detail: NetflixBrowseViewModel.FocusDetail?,
     content: LazyListScope.() -> Unit,
 ) {
@@ -150,8 +187,9 @@ private fun CategoryRowWithDetail(
             CompositionLocalProvider(LocalBringIntoViewSpec provides rememberLeadingEdgeBringIntoViewSpec()) {
                 LazyRow(
                     // Restore the last-focused tile when returning to the row (e.g. after going up to
-                    // the nav and back), instead of jumping to a different tile and scrolling the row.
-                    modifier = Modifier.focusRestorer(),
+                    // the nav and back). On the FIRST entry (nothing saved yet) fall back to the first
+                    // tile, so pressing down from the nav lands on item 0 rather than a middle tile.
+                    modifier = Modifier.focusRestorer(onRestoreFailed = { firstItemRequester }),
                     horizontalArrangement = Arrangement.spacedBy(NetflixRowGap),
                     contentPadding = PaddingValues(start = HeroPeek),
                     content = content,
@@ -216,6 +254,66 @@ internal fun rememberLeadingEdgeBringIntoViewSpec(peek: Dp = HeroPeek): BringInt
     return remember(peekPx) {
         object : BringIntoViewSpec {
             override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = offset - peekPx
+        }
+    }
+}
+
+/** The "Top 10 this week" rail: each poster fronted by a large Netflix-style rank number. */
+@Composable
+private fun Top10Row(movies: List<MovieEntity>, onPlay: (Long) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            androidx.compose.ui.res.stringResource(tv.own.owntv.R.string.browse_nf_top10_movies),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = OwnTVTheme.colors.onSurface,
+            modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
+        )
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(NetflixRowGap),
+            contentPadding = PaddingValues(start = HeroPeek),
+        ) {
+            itemsIndexed(movies, key = { _, it -> it.id }) { index, movie ->
+                Top10Card(rank = index + 1, movie = movie, onClick = { onPlay(movie.id) })
+            }
+        }
+    }
+}
+
+/** A big rank number with the poster beside it; the poster is the focusable target. */
+@Composable
+private fun Top10Card(rank: Int, movie: MovieEntity, onClick: () -> Unit) {
+    val colors = OwnTVTheme.colors
+    val height = NetflixCardHeight
+    val posterWidth = height * 2 / 3
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(
+            text = "$rank",
+            fontSize = (height.value * 0.8f).sp,
+            fontWeight = FontWeight.Black,
+            color = colors.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(6.dp))
+        FocusableSurface(
+            onClick = onClick,
+            shape = RoundedCornerShape(8.dp),
+            focusedScale = 1.06f,
+            unfocusedContainerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent,
+            modifier = Modifier.width(posterWidth).height(height),
+        ) { _ ->
+            Box(
+                Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(colors.surfaceContainerHigh),
+            ) {
+                if (!movie.posterUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = movie.posterUrl,
+                        contentDescription = movie.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
         }
     }
 }

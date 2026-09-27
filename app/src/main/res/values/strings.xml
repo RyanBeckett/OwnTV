@@ -8,4 +8,5 @@
     <string name="home_nf_top_movies">Top Rated Movies</string>
     <string name="home_nf_new_movies">Recently Added</string>
     <string name="home_nf_top_series">Popular Series</string>
+    <string name="browse_nf_top10_movies">Top 10 Movies This Week</string>
 </resources>
