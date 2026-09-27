@@ -3,10 +3,16 @@ package tv.own.owntv.features.browse
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingSource
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import tv.own.owntv.core.content.AdultCategoryClassifier
 import tv.own.owntv.core.database.dao.CategoryDao
@@ -15,6 +21,7 @@ import tv.own.owntv.core.database.dao.SeriesDao
 import tv.own.owntv.core.database.dao.SourceDao
 import tv.own.owntv.core.database.entity.MovieEntity
 import tv.own.owntv.core.database.entity.SeriesEntity
+import tv.own.owntv.core.metadata.MetadataRepository
 import tv.own.owntv.core.model.MediaType
 import tv.own.owntv.core.repository.activeProfileSources
 import tv.own.owntv.core.settings.SettingsRepository
@@ -33,16 +40,71 @@ class NetflixBrowseViewModel(
     private val categoryDao: CategoryDao,
     private val sourceDao: SourceDao,
     private val settings: SettingsRepository,
+    private val metadata: MetadataRepository,
 ) : ViewModel() {
 
     data class MovieRow(val title: String, val items: List<MovieEntity>)
     data class SeriesRow(val title: String, val items: List<SeriesEntity>)
+
+    /** Detail for the focused poster, shown below its row: genre/year/rating tags plus a synopsis. */
+    data class FocusDetail(val id: Long, val tags: List<String>, val plot: String?)
+
+    private sealed interface FocusReq {
+        data class Movie(val m: MovieEntity) : FocusReq
+        data class Series(val s: SeriesEntity) : FocusReq
+    }
 
     private val _movieRows = MutableStateFlow<List<MovieRow>>(emptyList())
     val movieRows: StateFlow<List<MovieRow>> = _movieRows.asStateFlow()
 
     private val _seriesRows = MutableStateFlow<List<SeriesRow>>(emptyList())
     val seriesRows: StateFlow<List<SeriesRow>> = _seriesRows.asStateFlow()
+
+    private val _focus = MutableStateFlow<FocusReq?>(null)
+
+    /** Resolves genres from the metadata cache (debounced, so settling on a poster does one lookup). */
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+    val focusDetail: StateFlow<FocusDetail?> = _focus
+        .debounce(MetadataRepository.FOCUS_DEBOUNCE_MS)
+        .mapLatest { resolveDetail(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun onFocusMovie(m: MovieEntity) { _focus.value = FocusReq.Movie(m) }
+    fun onFocusSeries(s: SeriesEntity) { _focus.value = FocusReq.Series(s) }
+
+    private suspend fun resolveDetail(req: FocusReq?): FocusDetail? = when (req) {
+        null -> null
+        is FocusReq.Movie -> {
+            val meta = runCatching { metadata.resolveMovie(req.m) }.getOrNull()
+            FocusDetail(
+                id = req.m.id,
+                tags = tags(genres(meta?.genresJson), req.m.year ?: meta?.year, req.m.rating?.toDouble() ?: meta?.rating),
+                plot = meta?.overview?.takeIf { it.isNotBlank() } ?: req.m.plot,
+            )
+        }
+        is FocusReq.Series -> {
+            val meta = runCatching { metadata.resolveSeries(req.s) }.getOrNull()
+            FocusDetail(
+                id = req.s.id,
+                tags = tags(genres(meta?.genresJson), req.s.year ?: meta?.year, req.s.rating?.toDouble() ?: meta?.rating),
+                plot = meta?.overview?.takeIf { it.isNotBlank() } ?: req.s.plot,
+            )
+        }
+    }
+
+    private fun genres(json: String?): List<String> {
+        if (json.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val arr = org.json.JSONArray(json)
+            (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun tags(genres: List<String>, year: Int?, rating: Double?): List<String> =
+        genres.take(3) + listOfNotNull(
+            year?.takeIf { it > 0 }?.toString(),
+            rating?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
+        )
 
     init { load() }
 

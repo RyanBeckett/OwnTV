@@ -362,8 +362,10 @@ fun HomeScreen(
         // the stock history/trending rows. DOWN from the top nav lands on the hero's Play button.
         if (featuredBillboards.isNotEmpty()) {
             item(key = "nf-hero") {
+                // Stable rotating hero — it does NOT follow row focus (that filled the top area and
+                // read as broken). Focus detail is shown below each row instead, Netflix-style.
                 NetflixBillboard(
-                    item = billboardFocus ?: featuredBillboards.getOrNull(heroRot),
+                    item = featuredBillboards.getOrNull(heroRot),
                     onPlay = { onPlayMovie(it, 0L) },
                 )
             }
