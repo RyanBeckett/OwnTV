@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -127,13 +128,40 @@ fun NetflixBillboard(
                     )
                 }
                 Spacer(Modifier.height(16.dp))
-                OwnTVButton(
-                    label = stringResource(R.string.content_action_play),
-                    icon = OwnTVIcon.PLAY,
-                    onClick = { onPlay(it.id) },
-                    style = OwnTVButtonStyle.PRIMARY,
-                )
+                BillboardPlayButton(onClick = { onPlay(it.id) })
             }
+        }
+    }
+}
+
+/**
+ * The billboard's Play button. Unlike the brand pill it is the ONLY focusable on the banner, so its
+ * focus state has to be obvious: solid white with dark text when focused (the row/selection is on the
+ * billboard), dimmed and translucent when not — so you can always tell whether the top is selected.
+ */
+@Composable
+private fun BillboardPlayButton(onClick: () -> Unit) {
+    FocusableSurface(
+        onClick = onClick,
+        shape = RoundedCornerShape(6.dp),
+        focusedScale = 1.06f,
+        unfocusedContainerColor = Color.White.copy(alpha = 0.28f),
+        focusedContainerColor = Color.White,
+        showFocusBorder = false,
+    ) { focused ->
+        val content = if (focused) Color.Black else Color.White
+        Row(
+            modifier = Modifier.padding(horizontal = 26.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OwnTVIcon(OwnTVIcon.PLAY, tint = content, modifier = Modifier.size(22.dp), filled = true)
+            Text(
+                stringResource(R.string.content_action_play),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = content,
+            )
         }
     }
 }

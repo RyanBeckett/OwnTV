@@ -22,12 +22,15 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -90,8 +93,11 @@ fun NetflixBrowseScreen(
     // Whether focus is anywhere in this content. When it leaves (e.g. up to the top nav) the hero's
     // selection rim fades, so it's clear the selection is no longer on the row.
     var contentFocused by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     LazyColumn(
+        state = listState,
         modifier = modifier
             .fillMaxSize()
             .onFocusChanged { contentFocused = it.hasFocus; if (it.hasFocus) onChildFocused() }
@@ -103,7 +109,15 @@ fun NetflixBrowseScreen(
         // Featured "critically acclaimed" billboard at the top (rotates each load); Play focuses first.
         if (featured != null) {
             item(key = "nf-featured") {
-                NetflixBillboard(item = featured, onPlay = onPlay)
+                // Coming back up to the billboard should reveal the WHOLE banner, not just scroll its
+                // Play button into view — so scroll the list to the very top whenever it takes focus.
+                Box(
+                    Modifier.onFocusChanged {
+                        if (it.hasFocus) scope.launch { runCatching { listState.animateScrollToItem(0) } }
+                    },
+                ) {
+                    NetflixBillboard(item = featured, onPlay = onPlay)
+                }
             }
         }
         if (mediaType == MediaType.MOVIE) {
