@@ -5,6 +5,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +33,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import org.koin.androidx.compose.koinViewModel
 import tv.own.owntv.core.model.MediaType
+import tv.own.owntv.ui.components.FocusHero
 import tv.own.owntv.ui.components.NetflixPosterCard
 import tv.own.owntv.ui.components.trapVerticalFocusExit
 import tv.own.owntv.ui.theme.OwnTVTheme
@@ -56,6 +59,8 @@ fun NetflixBrowseScreen(
     // below only shows once the debounced lookup catches up to this id — so while you're scrolling
     // fast the panel stays blank instead of flashing stale metadata for the tile you just left.
     var focusedId by remember { mutableStateOf<Long?>(null) }
+    // The focused item's name, tracked immediately (no debounce) so the hero's title never lags.
+    var focusedTitle by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = modifier
@@ -68,39 +73,38 @@ fun NetflixBrowseScreen(
     ) {
         if (mediaType == MediaType.MOVIE) {
             items(movieRows, key = { it.title }) { row ->
+                val isRowFocused = focusedRow == row.title
                 CategoryRowWithDetail(
                     title = row.title,
-                    detail = detail.takeIf { focusedRow == row.title && detail?.id == focusedId },
+                    heroTitle = focusedTitle.takeIf { isRowFocused },
+                    heroBackdrop = detail?.backdrop?.takeIf { isRowFocused && detail?.id == focusedId },
+                    detail = detail.takeIf { isRowFocused && detail?.id == focusedId },
                 ) {
                     items(row.items, key = { it.id }) { m ->
                         NetflixPosterCard(
                             posterUrl = m.posterUrl,
-                            // Only the focused card shows a backdrop, and only the resolved one (TMDB,
-                            // or the provider's as fallback) — null until then, so the poster holds and
-                            // the backdrop fades in once, cleanly.
-                            backdropUrl = if (m.id == focusedId) detail?.backdrop else null,
                             title = m.name,
-                            meta = nfMeta(m.year, m.rating?.toDouble()),
                             onClick = { onPlay(m.id) },
-                            onFocus = { focusedRow = row.title; focusedId = m.id; vm.onFocusMovie(m) },
+                            onFocus = { focusedRow = row.title; focusedId = m.id; focusedTitle = m.name; vm.onFocusMovie(m) },
                         )
                     }
                 }
             }
         } else {
             items(seriesRows, key = { it.title }) { row ->
+                val isRowFocused = focusedRow == row.title
                 CategoryRowWithDetail(
                     title = row.title,
-                    detail = detail.takeIf { focusedRow == row.title && detail?.id == focusedId },
+                    heroTitle = focusedTitle.takeIf { isRowFocused },
+                    heroBackdrop = detail?.backdrop?.takeIf { isRowFocused && detail?.id == focusedId },
+                    detail = detail.takeIf { isRowFocused && detail?.id == focusedId },
                 ) {
                     items(row.items, key = { it.id }) { s ->
                         NetflixPosterCard(
                             posterUrl = s.posterUrl,
-                            backdropUrl = if (s.id == focusedId) detail?.backdrop else null,
                             title = s.name,
-                            meta = nfMeta(s.year, s.rating?.toDouble()),
                             onClick = { onPlay(s.id) },
-                            onFocus = { focusedRow = row.title; focusedId = s.id; vm.onFocusSeries(s) },
+                            onFocus = { focusedRow = row.title; focusedId = s.id; focusedTitle = s.name; vm.onFocusSeries(s) },
                         )
                     }
                 }
@@ -109,17 +113,13 @@ fun NetflixBrowseScreen(
     }
 }
 
-/** "2025 · ★ 8.0" caption for a poster's focus overlay; null when nothing to show. */
-private fun nfMeta(year: Int?, rating: Double?): String? = listOfNotNull(
-    year?.takeIf { it > 0 }?.toString(),
-    rating?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
-).joinToString(" · ").ifBlank { null }
-
-/** A category title, its poster carousel, and — while this row holds focus — the focused item's detail below it. */
+/** A category title, its poster carousel with the persistent focus hero, and the focused item's detail below. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CategoryRowWithDetail(
     title: String,
+    heroTitle: String?,
+    heroBackdrop: String?,
     detail: NetflixBrowseViewModel.FocusDetail?,
     content: LazyListScope.() -> Unit,
 ) {
@@ -131,11 +131,21 @@ private fun CategoryRowWithDetail(
             color = OwnTVTheme.colors.onSurface,
             modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
         )
-        // Pin the focused card to a fixed spot near the row's start and slide the whole row under it
-        // (Netflix-style), instead of letting focus drift toward the right edge — which is also what
-        // kept the last, widest card growing off the screen. See [LeadingEdgeBringIntoView].
-        CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), content = content)
+        // The strip of portrait posters (pinned-left via LeadingEdgeBringIntoView) with the row's ONE
+        // persistent hero overlaid at that pinned-left gap. The focused poster reserves the landscape
+        // width; the hero fills it and crossfades between backdrops as selection moves — drawn once
+        // for the row, never rebuilt per tile.
+        Box {
+            CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), content = content)
+            }
+            if (heroTitle != null) {
+                FocusHero(
+                    backdrop = heroBackdrop,
+                    title = heroTitle,
+                    modifier = Modifier.align(Alignment.TopStart),
+                )
+            }
         }
         // Detail sits below the row and only for the focused row. A FIXED height (not a min) is what
         // stops the vertical bounce: the block is always this tall whether it's empty (scrolling) or

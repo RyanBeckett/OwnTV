@@ -83,8 +83,31 @@ class NetflixBrowseViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun onFocusMovie(m: MovieEntity) { _focus.value = FocusReq.Movie(m) }
-    fun onFocusSeries(s: SeriesEntity) { _focus.value = FocusReq.Series(s) }
+    private var prefetchJob: kotlinx.coroutines.Job? = null
+
+    fun onFocusMovie(m: MovieEntity) {
+        _focus.value = FocusReq.Movie(m)
+        val row = _movieRows.value.firstOrNull { r -> r.items.any { it.id == m.id } } ?: return
+        val idx = row.items.indexOfFirst { it.id == m.id }
+        prefetchAhead((1..PREFETCH_AHEAD).mapNotNull { row.items.getOrNull(idx + it) }) { metadata.resolveMovie(it) }
+    }
+
+    fun onFocusSeries(s: SeriesEntity) {
+        _focus.value = FocusReq.Series(s)
+        val row = _seriesRows.value.firstOrNull { r -> r.items.any { it.id == s.id } } ?: return
+        val idx = row.items.indexOfFirst { it.id == s.id }
+        prefetchAhead((1..PREFETCH_AHEAD).mapNotNull { row.items.getOrNull(idx + it) }) { metadata.resolveSeries(it) }
+    }
+
+    /**
+     * Warm the metadata cache for the next few tiles so, by the time focus reaches them, their
+     * backdrop URL is already resolved and the hero can load it at once instead of after a lookup.
+     */
+    private fun <T> prefetchAhead(items: List<T>, resolve: suspend (T) -> Unit) {
+        if (items.isEmpty()) return
+        prefetchJob?.cancel()
+        prefetchJob = viewModelScope.launch { items.forEach { runCatching { resolve(it) } } }
+    }
 
     /**
      * Network-free detail straight off the entity (no genres yet) — the instant first paint. Backdrop
@@ -201,6 +224,7 @@ class NetflixBrowseViewModel(
     companion object {
         const val MAX_ROWS = 15
         const val ROW_SIZE = 60
+        const val PREFETCH_AHEAD = 4
         // Settle delay before resolving the focus detail — far shorter than the core's 700ms focus
         // debounce. The screen blanks the panel while focus moves, so this only needs to outlast a
         // fast D-pad sweep; on settle the network-free tier-1 detail paints almost immediately.

@@ -104,6 +104,7 @@ import tv.own.owntv.ui.components.FocusableSurface
 import tv.own.owntv.ui.components.BillboardItem
 import tv.own.owntv.ui.components.NetflixBillboard
 import tv.own.owntv.ui.components.toBillboard
+import tv.own.owntv.ui.components.FocusHero
 import tv.own.owntv.ui.components.NetflixPosterCard
 import tv.own.owntv.ui.components.OwnTVButton
 import tv.own.owntv.ui.components.OwnTVButtonStyle
@@ -314,6 +315,8 @@ fun HomeScreen(
     // Id of the tile focused right now (no debounce). The detail below only shows once the debounced
     // lookup catches up to it, so fast scrolling leaves the panel blank instead of flashing stale data.
     var catalogFocusedId by remember(state.catalogTopMovies) { mutableStateOf<Long?>(null) }
+    // Focused item's name, tracked immediately so the hero title never lags behind selection.
+    var catalogFocusedTitle by remember(state.catalogTopMovies) { mutableStateOf<String?>(null) }
     val catalogDetail by vm.focusDetail.collectAsStateWithLifecycle()
     val featuredBillboards = remember(state.catalogTopMovies) {
         state.catalogTopMovies.filter { !it.backdropUrl.isNullOrBlank() }
@@ -382,8 +385,10 @@ fun HomeScreen(
                     title = stringResource(R.string.home_nf_top_movies),
                     movies = state.catalogTopMovies,
                     onPlay = { onPlayMovie(it, 0L) },
+                    heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-movies" },
+                    heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
                     detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-movies" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-top-movies"; catalogFocusedId = it.id; vm.onFocusCatalogMovie(it) },
+                    onFocus = { catalogFocusedRow = "nf-top-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -393,8 +398,10 @@ fun HomeScreen(
                     title = stringResource(R.string.home_nf_new_movies),
                     movies = state.catalogNewMovies,
                     onPlay = { onPlayMovie(it, 0L) },
+                    heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-new-movies" },
+                    heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
                     detail = catalogDetail.takeIf { catalogFocusedRow == "nf-new-movies" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-new-movies"; catalogFocusedId = it.id; vm.onFocusCatalogMovie(it) },
+                    onFocus = { catalogFocusedRow = "nf-new-movies"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogMovie(it) },
                 )
             }
         }
@@ -403,8 +410,10 @@ fun HomeScreen(
                 NetflixCatalogSeriesRow(
                     title = stringResource(R.string.home_nf_top_series),
                     series = state.catalogTopSeries,
+                    heroTitle = catalogFocusedTitle.takeIf { catalogFocusedRow == "nf-top-series" },
+                    heroBackdrop = catalogDetail?.backdrop?.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
                     detail = catalogDetail.takeIf { catalogFocusedRow == "nf-top-series" && catalogDetail?.id == catalogFocusedId },
-                    onFocus = { catalogFocusedRow = "nf-top-series"; catalogFocusedId = it.id; vm.onFocusCatalogSeries(it) },
+                    onFocus = { catalogFocusedRow = "nf-top-series"; catalogFocusedId = it.id; catalogFocusedTitle = it.name; vm.onFocusCatalogSeries(it) },
                 )
             }
         }
@@ -2172,10 +2181,18 @@ private fun SkeletonRowPlaceholder(
 // ============================================================================================
 
 
-/** A titled horizontal poster row of catalogue movies, with the focused item's detail below it. */
+/** A titled horizontal poster row of catalogue movies, with a persistent focus hero and detail below. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onPlay: (Long) -> Unit, detail: HomeViewModel.FocusDetail? = null, onFocus: (MovieEntity) -> Unit = {}) {
+private fun NetflixCatalogMovieRow(
+    title: String,
+    movies: List<MovieEntity>,
+    onPlay: (Long) -> Unit,
+    heroTitle: String? = null,
+    heroBackdrop: String? = null,
+    detail: HomeViewModel.FocusDetail? = null,
+    onFocus: (MovieEntity) -> Unit = {},
+) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             title,
@@ -2184,30 +2201,38 @@ private fun NetflixCatalogMovieRow(title: String, movies: List<MovieEntity>, onP
             color = OwnTVTheme.colors.onSurface,
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
-        CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(movies, key = { it.id }) { movie ->
-                    NetflixPosterCard(
-                        posterUrl = movie.posterUrl,
-                        // Only the focused card shows a backdrop, and only the resolved one — null until
-                        // then, so the poster holds and the backdrop fades in once, cleanly.
-                        backdropUrl = if (movie.id == detail?.id) detail?.backdrop else null,
-                        title = movie.name,
-                        meta = posterMeta(movie.year, movie.rating?.toDouble()),
-                        onClick = { onPlay(movie.id) },
-                        onFocus = { onFocus(movie) },
-                    )
+        Box {
+            CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(movies, key = { it.id }) { movie ->
+                        NetflixPosterCard(
+                            posterUrl = movie.posterUrl,
+                            title = movie.name,
+                            onClick = { onPlay(movie.id) },
+                            onFocus = { onFocus(movie) },
+                        )
+                    }
                 }
+            }
+            if (heroTitle != null) {
+                FocusHero(backdrop = heroBackdrop, title = heroTitle, modifier = Modifier.align(Alignment.TopStart))
             }
         }
         CatalogRowDetail(detail)
     }
 }
 
-/** A titled horizontal poster row of catalogue series, with the focused item's detail below it. */
+/** A titled horizontal poster row of catalogue series, with a persistent focus hero and detail below. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, detail: HomeViewModel.FocusDetail? = null, onFocus: (SeriesEntity) -> Unit = {}) {
+private fun NetflixCatalogSeriesRow(
+    title: String,
+    series: List<SeriesEntity>,
+    heroTitle: String? = null,
+    heroBackdrop: String? = null,
+    detail: HomeViewModel.FocusDetail? = null,
+    onFocus: (SeriesEntity) -> Unit = {},
+) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             title,
@@ -2216,15 +2241,21 @@ private fun NetflixCatalogSeriesRow(title: String, series: List<SeriesEntity>, d
             color = OwnTVTheme.colors.onSurface,
             modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
         )
-        CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(series, key = { it.id }) { s ->
-                    NetflixPosterCard(
-                        posterUrl = s.posterUrl,
-                        backdropUrl = if (s.id == detail?.id) detail?.backdrop else null,
-                        title = s.name, meta = posterMeta(s.year, s.rating?.toDouble()), onClick = {}, onFocus = { onFocus(s) },
-                    )
+        Box {
+            CompositionLocalProvider(LocalBringIntoViewSpec provides LeadingEdgeBringIntoView) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(series, key = { it.id }) { s ->
+                        NetflixPosterCard(
+                            posterUrl = s.posterUrl,
+                            title = s.name,
+                            onClick = {},
+                            onFocus = { onFocus(s) },
+                        )
+                    }
                 }
+            }
+            if (heroTitle != null) {
+                FocusHero(backdrop = heroBackdrop, title = heroTitle, modifier = Modifier.align(Alignment.TopStart))
             }
         }
         CatalogRowDetail(detail)
@@ -2260,9 +2291,4 @@ private fun CatalogRowDetail(detail: HomeViewModel.FocusDetail?) {
     }
 }
 
-/** "2025 · ★ 8.0" style caption for a poster's focus overlay; null when there's nothing to show. */
-private fun posterMeta(year: Int?, rating: Double?): String? = listOfNotNull(
-    year?.takeIf { it > 0 }?.toString(),
-    rating?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
-).joinToString(" · ").ifBlank { null }
 

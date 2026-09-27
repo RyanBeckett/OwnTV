@@ -79,6 +79,9 @@ private const val CATALOG_ROW_SIZE = 60
  */
 private const val FOCUS_SETTLE_MS = 180L
 
+/** How many tiles ahead of the focused catalogue tile to warm the metadata cache for. */
+private const val CATALOG_PREFETCH_AHEAD = 4
+
 @Immutable
 data class HomeUiState(
     val trendingItems: List<TrendingHomeItem> = emptyList(),
@@ -172,8 +175,30 @@ class HomeViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun onFocusCatalogMovie(m: MovieEntity) { _focus.value = FocusReq.Movie(m) }
-    fun onFocusCatalogSeries(s: SeriesEntity) { _focus.value = FocusReq.Series(s) }
+    private var catalogPrefetchJob: kotlinx.coroutines.Job? = null
+
+    fun onFocusCatalogMovie(m: MovieEntity) {
+        _focus.value = FocusReq.Movie(m)
+        val list = listOf(_uiState.value.catalogTopMovies, _uiState.value.catalogNewMovies)
+            .firstOrNull { l -> l.any { it.id == m.id } } ?: return
+        val idx = list.indexOfFirst { it.id == m.id }
+        prefetchAheadCatalog((1..CATALOG_PREFETCH_AHEAD).mapNotNull { list.getOrNull(idx + it) }) { metadata.resolveMovie(it) }
+    }
+
+    fun onFocusCatalogSeries(s: SeriesEntity) {
+        _focus.value = FocusReq.Series(s)
+        val list = _uiState.value.catalogTopSeries
+        val idx = list.indexOfFirst { it.id == s.id }
+        if (idx < 0) return
+        prefetchAheadCatalog((1..CATALOG_PREFETCH_AHEAD).mapNotNull { list.getOrNull(idx + it) }) { metadata.resolveSeries(it) }
+    }
+
+    /** Warm the next few tiles' metadata so their backdrop is resolved before focus reaches them. */
+    private fun <T> prefetchAheadCatalog(items: List<T>, resolve: suspend (T) -> Unit) {
+        if (items.isEmpty()) return
+        catalogPrefetchJob?.cancel()
+        catalogPrefetchJob = viewModelScope.launch { items.forEach { runCatching { resolve(it) } } }
+    }
 
     /** Network-free detail straight off the entity (no genres yet) — the instant first paint. */
     private fun instantFocusDetail(req: FocusReq?): FocusDetail? = when (req) {
